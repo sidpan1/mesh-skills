@@ -1,5 +1,7 @@
 import pytest
-from skills.mesh_trajectory.scripts.validate import validate_payload, ValidationError
+from skills.mesh_trajectory.scripts.validate import (
+    validate_payload, parse_markdown, ValidationError,
+)
 
 VALID = {
     "schema_version": 1,
@@ -45,3 +47,24 @@ def test_body_too_short_is_refused():
 def test_body_too_long_is_refused():
     with pytest.raises(ValidationError, match="body"):
         validate_payload(VALID, body="word " * 500)
+
+
+def test_parse_markdown_refuses_missing_opening_fence(tmp_path):
+    f = tmp_path / "u.md"
+    f.write_text("name: Asha\n")
+    with pytest.raises(ValidationError, match="begin with"):
+        parse_markdown(f)
+
+
+def test_parse_markdown_refuses_missing_closing_fence(tmp_path):
+    f = tmp_path / "u.md"
+    f.write_text("---\nname: Asha\n")
+    with pytest.raises(ValidationError, match="closing"):
+        parse_markdown(f)
+
+
+def test_parse_markdown_refuses_empty_frontmatter(tmp_path):
+    f = tmp_path / "u.md"
+    f.write_text("---\n---\n\nbody")
+    with pytest.raises(ValidationError, match="mapping"):
+        parse_markdown(f)

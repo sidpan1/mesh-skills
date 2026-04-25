@@ -51,8 +51,14 @@ def parse_markdown(path: Path) -> tuple[dict, str]:
     text = path.read_text()
     if not text.startswith("---\n"):
         raise ValidationError("file must begin with YAML frontmatter '---'")
-    _, fm_text, body = text.split("---\n", 2)
-    return yaml.safe_load(fm_text), body.strip()
+    parts = text.split("---\n", 2)
+    if len(parts) != 3:
+        raise ValidationError("file must end frontmatter with closing '---'")
+    _, fm_text, body = parts
+    fm = yaml.safe_load(fm_text)
+    if not isinstance(fm, dict):
+        raise ValidationError("frontmatter must be a YAML mapping")
+    return fm, body.strip()
 
 
 def main() -> int:
