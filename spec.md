@@ -57,34 +57,43 @@ Every choice below was made deliberately during brainstorming. Alternatives are 
 | D9 | **Matching mechanism** | **Claude is the matching engine** (single prompt over all summaries) | Embeddings + cosine similarity; hybrid Claude + embedding sanity check | Aligned with "Claude is the AI layer." Embeddings are V0.1 fast-filter when scale demands |
 | D10 | **Invite delivery** | Pure Claude-native: `/mesh-check` slash command pulls from git | Email link; auto-notify hook | No external send infra. Founder WhatsApps the cohort to "run /mesh-check" |
 | D11 | **Data schema** | Minimal 8-field document (see Data Schema) | Tags; opt-in highlights | Most defensible privacy posture. Tags revisit in V0.1 |
+| D12 | **Hierarchical recursive summarization** | 3-layer: per-session -> per-project -> trajectory; bucket labels (CENTRAL/REGULAR/OCCASIONAL/ONE-OFF) provide texture without raw count weighting | Flat synthesis over per-session digests; flat synthesis over raw conversations | Plan 02 verification on the founder's real corpus (170 sessions across many logical projects) showed the flat synthesizer over-indexes on volume; one project with 80 sessions dominated the body at the expense of 25 other initiatives. The project layer ensures every project gets one slot in the synthesis input regardless of session count. |
+| D13 | **LLM-as-judge interactive privacy lint** | Local Claude judges the candidate body, returns JSON-flagged spans by category/severity; user resolves each flag via AskUserQuestion (KEEP/REDACT/REPHRASE) before push | Schema-only validator (D11) alone; regex denylist; pre-push human-only review with no automation | The schema validator (D11) checks field shape, not content. Plan 02 surfaced a personally-sensitive sentence in a session digest that did not reach the body only because the founder made an editorial call; for non-founder users this gap is load-bearing. LLM-as-judge catches novel phrasings a regex list cannot; per-flag interactive resolution preserves user agency over the final body. |
 
 ---
 
 ## Architecture
 
 ```
-USER MACHINE                              CENTRAL                       FIRST DINNER
-+------------------------------+          +------------------+          +-------------+
-| paste prompt -> Claude       |  git     | founder's laptop |  git     | Sat 7pm     |
-|   |- asks: name/LI/role/     |  push    | runs             |  push    | Bengaluru   |
-|   |   city/sat-avail         | -------> | /mesh-orchestrate| -------> | table of 6  |
-|   |- installs mesh skill     |          |   (Friday wk 2)  |          | venue:      |
-|   |- skill reads ~/.claude/  |          | * reads users/   |  invite  | pre-booked  |
-|   |   projects sessions      |          | * Claude-as-     |   md     |             |
-|   |- local Claude writes a   |          |   matcher in one |          |             |
-|   |   200-word trajectory    |          |   prompt         |          |             |
-|   |- user reviews + commits  |          | * writes invite  |          |             |
-|   |   to mesh-data repo      |          |   md per table   |          |             |
-|   |- /mesh-check displays    |          +------------------+          +-------------+
-|       invite when ready      |                  |                           ^
-+------------------------------+                  v                           |
-                                          mesh-data repo                      |
-                                          networking-dinners/                 |
-                                          dinner-2026-05-09/                  |
-                                            table-1.md ----------------------+
+USER MACHINE                                          CENTRAL                       FIRST DINNER
++-----------------------------------------+           +------------------+          +-------------+
+| paste prompt -> Claude                  |   git     | founder's laptop |   git    | Sat 7pm     |
+|   |- asks: name/LI/role/city/sat-avail  |   push    | runs             |   push   | Bengaluru   |
+|   |- installs mesh skill                | --------> | /mesh-orchestrate| -------> | table of 6  |
+|   |- skill reads ~/.claude/projects     |           |   (Friday wk 2)  |          | venue:      |
+|   |                                     |           | * reads users/   |  invite  | pre-booked  |
+|   v hierarchical summarization          |           | * Claude-as-     |   md     |             |
+|   per-session digests                   |           |   matcher in one |          |             |
+|        |                                |           |   prompt         |          |             |
+|        v group by normalized project    |           | * writes invite  |          |             |
+|   per-project summaries (with bucket    |           |   md per table   |          |             |
+|     labels: CENTRAL/REGULAR/OCCASIONAL/ |           +------------------+          +-------------+
+|     ONE-OFF; equal voice across)        |                   |                           ^
+|        |                                |                   v                           |
+|        v synthesize over project        |           mesh-data repo                      |
+|   200-word trajectory body              |           networking-dinners/                 |
+|        |                                |           dinner-2026-05-09/                  |
+|        v privacy lint (LLM-as-judge)    |           table-1.md ----------------------+
+|   AskUserQuestion per flag (KEEP/       |
+|     REDACT/REPHRASE)                    |
+|        |                                |
+|        v user reviews + commits         |
+|   to mesh-data repo                     |
+|   /mesh-check displays invite when ready|
++-----------------------------------------+
 ```
 
-**Key property**: two Claude agents communicating through a single git repo. No web app, no API server, no database. The privacy contract is enforced by a pre-push validator on the user's machine.
+**Key property**: two Claude agents communicating through a single git repo. No web app, no API server, no database. The user-side pipeline summarizes hierarchically (session -> project -> trajectory) so volume bias does not dominate the body, and an interactive privacy lint reviews the body before push. The privacy contract is enforced by both a pre-push schema validator and the user's per-flag KEEP/REDACT/REPHRASE decisions.
 
 ---
 
@@ -188,8 +197,12 @@ Day 7 (Fri)    LAUNCH EVENT (30 people)    Day 14 (Fri) /mesh-orchestrate run
 Privacy is not a "solve later" problem. It is the thing that kills adoption at the first serious user.
 
 - All session reading runs locally on the user's machine. Raw conversations never leave the device.
-- Only the 8 schema fields above are uploaded. The pre-push validator refuses pushes that contain anything else.
-- The user reviews and edits the 200-word trajectory summary before any push.
+- The user-side pipeline holds intermediate artifacts in three staged temp files at `/tmp/mesh_*`, each deleted IMMEDIATELY after the next downstream step:
+  1. `/tmp/mesh_sessions.json` (raw scrubbed per-session corpora) - deleted after the per-session digest pass.
+  2. `/tmp/mesh_digests.txt` + `/tmp/mesh_groups.json` (compressed signals + grouping metadata) - deleted after the per-project summarization pass.
+  3. `/tmp/mesh_project_summaries.txt` + `/tmp/mesh_why.txt` (project-level intermediate + the user's why-seed) - deleted after synthesis.
+- Only the 8 schema fields above are uploaded. The pre-push validator REFUSES pushes that contain anything else.
+- An interactive privacy lint runs on the candidate body BEFORE push: local Claude flags suspect spans by category (career, family-health, internal-codename, customer-partner, other) and severity, and the user resolves each flag via `AskUserQuestion` with KEEP / REDACT / REPHRASE options. The user reviews the per-project summaries (one checkpoint) and the lint-reviewed body (second checkpoint) before any commit.
 - The mesh-data repo is private; access is limited to the founder and the user's own commits.
 - Users can inspect, edit, or delete their `users/<email>.md` at any time via `/mesh-sync`.
 
