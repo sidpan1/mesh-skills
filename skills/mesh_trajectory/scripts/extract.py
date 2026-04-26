@@ -1,7 +1,17 @@
-"""Read ~/.claude/projects/*/conversation.jsonl, scrub, return a corpus.
+"""Read ~/.claude/projects/<project>/<session-uuid>.jsonl, scrub, return a corpus.
 
 The corpus is what local Claude reads to write the trajectory summary.
 Only user + assistant text, scrubbed of paths and API-key shapes.
+
+Real Claude Code session-log shape:
+    {
+      "type": "user" | "assistant" | "system" | "file-history-snapshot" | ...,
+      "timestamp": "2026-03-06T08:10:48.513Z",
+      "message": { "role": "user" | "assistant", "content": str | [ {type, ...} ] },
+      ...
+    }
+We keep only type ∈ {user, assistant} and extract only `text` blocks (skip
+`thinking`, `tool_use`, `tool_result` — those leak filesystem state and PII).
 """
 import json
 import os
@@ -62,7 +72,7 @@ def extract_corpus(
     ) - timedelta(weeks=weeks)
 
     chunks: list[str] = []
-    for jsonl in sorted(projects_root.rglob("conversation.jsonl")):
+    for jsonl in sorted(projects_root.rglob("*.jsonl")):
         for line in jsonl.read_text().splitlines():
             if not line.strip():
                 continue
@@ -70,7 +80,7 @@ def extract_corpus(
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if msg.get("role") not in ("user", "assistant"):
+            if msg.get("type") not in ("user", "assistant"):
                 continue
             ts_str = msg.get("timestamp")
             if not ts_str:
@@ -81,13 +91,30 @@ def extract_corpus(
                 continue
             if ts < cutoff:
                 continue
-            content = msg.get("content")
-            if not isinstance(content, str):
+            text = _extract_text(msg.get("message"))
+            if not text.strip():
                 continue
-            chunks.append(f"[{msg['role']}] {scrub_message(content)}")
+            chunks.append(f"[{msg['type']}] {scrub_message(text)}")
 
     corpus = "\n\n".join(chunks)
     return corpus[:max_chars]
+
+
+def _extract_text(inner) -> str:
+    if not isinstance(inner, dict):
+        return ""
+    content = inner.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                t = item.get("text", "")
+                if isinstance(t, str):
+                    parts.append(t)
+        return " ".join(parts)
+    return ""
 
 
 def main() -> int:

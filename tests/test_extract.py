@@ -6,32 +6,101 @@ from skills.mesh_trajectory.scripts.extract import (
 
 
 def _make_jsonl(path: Path, messages: list[dict]):
+    """Write messages in the REAL Claude Code format: type + nested message{role,content}."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(json.dumps(m) for m in messages))
 
 
+def _msg(type_: str, text: str, ts: str) -> dict:
+    """Build a real-shape Claude Code log entry with a single text content block."""
+    return {
+        "type": type_,
+        "timestamp": ts,
+        "message": {
+            "role": type_,
+            "content": [{"type": "text", "text": text}],
+        },
+    }
+
+
+def _msg_str(type_: str, text: str, ts: str) -> dict:
+    """Build a real-shape entry with string-form content (some user messages do this)."""
+    return {
+        "type": type_,
+        "timestamp": ts,
+        "message": {"role": type_, "content": text},
+    }
+
+
 def test_extract_returns_only_user_and_assistant_text(tmp_path):
-    proj = tmp_path / "proj-a" / "conversation.jsonl"
+    proj = tmp_path / "proj-a" / "abc-uuid.jsonl"
     _make_jsonl(proj, [
-        {"role": "user", "content": "How do I add streaming to my agent?", "timestamp": "2026-04-20T10:00:00Z"},
-        {"role": "assistant", "content": "You can use Server-Sent Events.", "timestamp": "2026-04-20T10:00:05Z"},
-        {"role": "tool", "content": "<file contents redacted>", "timestamp": "2026-04-20T10:00:10Z"},
+        _msg("user", "How do I add streaming to my agent?", "2026-04-20T10:00:00Z"),
+        _msg("assistant", "You can use Server-Sent Events.", "2026-04-20T10:00:05Z"),
+        _msg("system", "<system note>", "2026-04-20T10:00:10Z"),
+        {"type": "file-history-snapshot", "timestamp": "2026-04-20T10:00:15Z", "snapshot": "x"},
     ])
     corpus = extract_corpus(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
     assert "streaming" in corpus
     assert "Server-Sent Events" in corpus
-    assert "<file contents redacted>" not in corpus
+    assert "<system note>" not in corpus
+    assert "[user]" in corpus
+    assert "[assistant]" in corpus
 
 
 def test_extract_drops_messages_older_than_window(tmp_path):
-    proj = tmp_path / "proj-b" / "conversation.jsonl"
+    proj = tmp_path / "proj-b" / "def-uuid.jsonl"
     _make_jsonl(proj, [
-        {"role": "user", "content": "OLD MESSAGE", "timestamp": "2026-01-01T00:00:00Z"},
-        {"role": "user", "content": "RECENT MESSAGE", "timestamp": "2026-04-22T00:00:00Z"},
+        _msg("user", "OLD MESSAGE", "2026-01-01T00:00:00Z"),
+        _msg("user", "RECENT MESSAGE", "2026-04-22T00:00:00Z"),
     ])
     corpus = extract_corpus(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
     assert "OLD MESSAGE" not in corpus
     assert "RECENT MESSAGE" in corpus
+
+
+def test_extract_handles_string_and_list_content(tmp_path):
+    proj = tmp_path / "proj-d" / "ghi-uuid.jsonl"
+    _make_jsonl(proj, [
+        _msg_str("user", "STRING CONTENT MESSAGE", "2026-04-22T10:00:00Z"),
+        _msg("assistant", "LIST CONTENT MESSAGE", "2026-04-22T10:00:05Z"),
+    ])
+    corpus = extract_corpus(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    assert "STRING CONTENT MESSAGE" in corpus
+    assert "LIST CONTENT MESSAGE" in corpus
+
+
+def test_extract_skips_non_text_content_blocks(tmp_path):
+    proj = tmp_path / "proj-e" / "jkl-uuid.jsonl"
+    _make_jsonl(proj, [
+        {
+            "type": "assistant",
+            "timestamp": "2026-04-22T10:00:00Z",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "SECRET PRIVATE THINKING"},
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "TOOL_USE_LEAK"}},
+                    {"type": "text", "text": "VISIBLE ASSISTANT TEXT"},
+                ],
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-04-22T10:00:05Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "content": "TOOL_RESULT_LEAK"},
+                ],
+            },
+        },
+    ])
+    corpus = extract_corpus(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    assert "VISIBLE ASSISTANT TEXT" in corpus
+    assert "SECRET PRIVATE THINKING" not in corpus
+    assert "TOOL_USE_LEAK" not in corpus
+    assert "TOOL_RESULT_LEAK" not in corpus
 
 
 def test_scrub_strips_absolute_paths():
@@ -72,9 +141,9 @@ def test_scrub_does_not_mangle_https_urls():
 
 
 def test_corpus_is_capped_to_max_chars(tmp_path):
-    proj = tmp_path / "proj-c" / "conversation.jsonl"
+    proj = tmp_path / "proj-c" / "mno-uuid.jsonl"
     _make_jsonl(proj, [
-        {"role": "user", "content": "long " * 10000, "timestamp": "2026-04-22T00:00:00Z"},
+        _msg("user", "long " * 10000, "2026-04-22T00:00:00Z"),
     ])
     corpus = extract_corpus(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z", max_chars=5000)
     assert len(corpus) <= 5000

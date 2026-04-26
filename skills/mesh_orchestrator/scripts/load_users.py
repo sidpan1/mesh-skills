@@ -22,13 +22,16 @@ def _parse(path: Path) -> User | None:
         return None
     _, fm_text, body = text.split("---\n", 2)
     fm = yaml.safe_load(fm_text)
+    # Hand-edited files may have unquoted ISO dates that YAML loads as datetime.date
+    # objects; coerce to strings so target-date comparison works.
+    sats = [str(s) for s in fm["available_saturdays"]]
     return User(
         email=fm["email"],
         name=fm["name"],
         linkedin_url=fm["linkedin_url"],
         role=fm["role"],
         city=fm["city"],
-        available_saturdays=fm["available_saturdays"],
+        available_saturdays=sats,
         do_not_match=fm.get("do_not_match", []) or [],
         body=body.strip(),
     )

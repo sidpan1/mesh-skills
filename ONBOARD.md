@@ -40,7 +40,18 @@ Tell the user:
 >  repository. Visit https://github.com/settings/tokens, create a fine-grained
 >  token scoped to `mesh-data` only, and paste it here."
 
-Set in env: `export MESH_GH_TOKEN=<token>` and persist to `~/.config/mesh/env`.
+Persist the token so it's available in every future Claude Code session:
+
+```bash
+mkdir -p ~/.config/mesh
+echo 'export MESH_GH_TOKEN=<token>' > ~/.config/mesh/env
+chmod 600 ~/.config/mesh/env
+# Source on every shell startup:
+echo 'source ~/.config/mesh/env' >> ~/.zshrc   # or ~/.bashrc on Linux
+source ~/.config/mesh/env
+```
+
+Verify with `echo $MESH_GH_TOKEN` (should print the token).
 
 ## Step 3: Run /mesh-onboard
 

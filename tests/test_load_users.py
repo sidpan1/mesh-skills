@@ -33,6 +33,18 @@ def test_user_has_body_attribute(tmp_path):
     assert "trajectory text" in users[0].body
 
 
+def test_handles_unquoted_iso_dates(tmp_path):
+    # YAML parses unquoted 2026-05-09 as datetime.date — must still match.
+    (tmp_path / "users").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "users" / "z_at_y.md").write_text(
+        "---\nschema_version: 1\nname: Z\nemail: z@y.com\n"
+        "linkedin_url: https://x\nrole: Eng\ncity: Bengaluru\n"
+        "available_saturdays:\n  - 2026-05-09\n  - 2026-05-16\n---\n\n" + ("body " * 60)
+    )
+    users = load_users_for_date(tmp_path, "2026-05-09")
+    assert [u.email for u in users] == ["z@y.com"]
+
+
 def test_skips_users_in_wrong_city(tmp_path, monkeypatch):
     # Write a Mumbai user manually (bypass our test helper which hardcodes Bengaluru)
     (tmp_path / "users").mkdir(parents=True, exist_ok=True)

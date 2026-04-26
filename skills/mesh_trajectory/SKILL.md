@@ -34,25 +34,28 @@ User-side skill for MESH V0. Reads local Claude Code sessions, summarizes via lo
    - Optional: emails of people they should NOT be matched with (`do_not_match`)
 3. Ask the user for their `MESH_GH_TOKEN` (GitHub PAT with `repo` scope on `mesh-data`). Set in env.
 4. Ask the user for the mesh-data repo URL (default: `https://github.com/sidpan1/mesh-data`).
-5. Run `.venv/bin/python -m skills.mesh_trajectory.scripts.extract > /tmp/mesh_corpus.txt`. Show the user the corpus length and confirm they're OK with the contents being summarized (the corpus does not leave the device, only the summary).
+5. Run `~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.extract > /tmp/mesh_corpus.txt`. Show the user the corpus length and confirm they're OK with the contents being summarized (the corpus does not leave the device, only the summary).
 6. Read `prompts/summarize.md`. Substitute `{{corpus}}` with `/tmp/mesh_corpus.txt` contents. Generate the 200-word trajectory paragraph in your response.
 7. **Immediately delete the corpus file:** `rm -f /tmp/mesh_corpus.txt`. Privacy contract: raw conversation snippets must not linger on disk.
 8. Write the paragraph to `/tmp/mesh_body.md`. Show it to the user. Ask them to edit (open in $EDITOR or paste replacement). Loop until approved.
 9. Compose the YAML frontmatter from collected answers. Write to `/tmp/mesh_fm.yaml`.
-10. Run `.venv/bin/python -m skills.mesh_trajectory.scripts.push $REPO_URL /tmp/mesh_fm.yaml /tmp/mesh_body.md`.
+9b. Persist the profile for future `/mesh-sync` runs: `mkdir -p ~/.config/mesh && cp /tmp/mesh_fm.yaml ~/.config/mesh/profile.yaml`. Body is NOT persisted (always re-derived from fresh corpus).
+10. Run `cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.push $REPO_URL /tmp/mesh_fm.yaml /tmp/mesh_body.md` (cd matters: the push script clones mesh-data into a relative `~/.cache/mesh-data` and the import path resolves from the skill dir).
 11. Delete the temp files: `rm -f /tmp/mesh_body.md /tmp/mesh_fm.yaml`.
 12. On success, print: "MESH onboarding complete. You'll get an invite via /mesh-check on Friday evening."
 13. On REFUSED output: explain what was rejected and why. Do not retry without user fixing the input. The corpus file should already be deleted; verify with `ls /tmp/mesh_corpus.txt` returning No such file.
 
 ## /mesh-sync flow
 
-Same as /mesh-onboard from step 5 onwards, reusing answers stored in `~/.config/mesh/profile.yaml` (created on first onboard). The same explicit corpus deletion (step 7) applies.
+1. Read `~/.config/mesh/profile.yaml` (written by `/mesh-onboard` step 9b). If missing, redirect to `/mesh-onboard`.
+2. Read `MESH_GH_TOKEN` from env. If unset, ask user to re-source `~/.config/mesh/env` (or re-run `/mesh-onboard`).
+3. Continue from `/mesh-onboard` step 5 onwards, using the loaded profile as the answers (do not re-ask). Step 7 (corpus deletion) and step 9b (profile re-persist, in case answers changed) still apply.
 
 ## /mesh-check flow
 
 1. `git -C ~/.cache/mesh-data pull --rebase`
 2. Find `networking-dinners/dinner-*/table-*.md` files containing the user's email.
-3. For the most recent matching file, run `.venv/bin/python -m skills.mesh_trajectory.scripts.render_invite <path>` and show the formatted output.
+3. For the most recent matching file, run `~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.render_invite <path>` and show the formatted output.
 4. If none, print: "No invite yet. Founder runs the orchestrator on Fridays."
 
 ## /mesh-status flow

@@ -21,28 +21,32 @@ Founder-side skill, run on the founder's laptop on Friday morning to compose tab
 1. Compute `dinner_date` (default: next Saturday in YYYY-MM-DD).
 2. Ask the user (founder) for the venue if not previously set this week. Save in `~/.config/mesh/orchestrator.yaml`.
 3. `git -C ~/.cache/mesh-data pull --rebase` (clone first if missing: `git clone https://github.com/sidpan1/mesh-data ~/.cache/mesh-data`).
-4. Load available users via:
+4. Load available users via (run from the skill dir so imports resolve):
    ```bash
-   .venv/bin/python -c "from skills.mesh_orchestrator.scripts.load_users import load_users_for_date; import json; from pathlib import Path; print(json.dumps([u.__dict__ for u in load_users_for_date(Path('~/.cache/mesh-data').expanduser(), '<dinner_date>')]))"
+   cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -c "from skills.mesh_orchestrator.scripts.load_users import load_users_for_date; import json; from pathlib import Path; print(json.dumps([u.__dict__ for u in load_users_for_date(Path('~/.cache/mesh-data').expanduser(), '<dinner_date>')]))"
    ```
    Capture the JSON list. Save it to `/tmp/mesh_users.json`.
 5. If fewer than 6 users available: print the list, ask founder whether to proceed (low-quorum dinner) or cancel. If proceed, set `low_quorum: true` for the prompt.
 6. Read `prompts/compose.md`. Substitute `{{dinner_date}}`, `{{venue}}`, `{{users_json}}` (from `/tmp/mesh_users.json`).
 7. Generate the response (you, Claude, ARE the matching engine here). Output the strict JSON per the prompt to `/tmp/mesh_response.json`.
-8. Validate the JSON:
+8. Validate the JSON (run from the skill dir):
    ```bash
-   .venv/bin/python -c "from skills.mesh_orchestrator.scripts.parse_response import parse_response; import sys, json; print(json.dumps(parse_response(sys.stdin.read())))" < /tmp/mesh_response.json
+   cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -c "from skills.mesh_orchestrator.scripts.parse_response import parse_response; import sys, json; print(json.dumps(parse_response(sys.stdin.read())))" < /tmp/mesh_response.json
    ```
    On ParseError, regenerate with the error in your context. Loop up to 3 times before falling back to manual.
 9. Show the founder the parsed response. Founder approves or asks for changes (in which case re-prompt with feedback).
-10. Write invites:
+10. Write invites (run from the skill dir):
     ```bash
-    .venv/bin/python -c "from skills.mesh_orchestrator.scripts.write_invites import write_invites; import json, pathlib; write_invites(pathlib.Path('~/.cache/mesh-data').expanduser(), json.load(open('/tmp/mesh_response.json')), time='19:00')"
+    cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -c "from skills.mesh_orchestrator.scripts.write_invites import write_invites; import json, pathlib; write_invites(pathlib.Path('~/.cache/mesh-data').expanduser(), json.load(open('/tmp/mesh_response.json')), time='19:00')"
     ```
-11. Commit + push:
+11. Commit + push (inject `MESH_GH_TOKEN` so the push is non-interactive):
     ```bash
-    cd ~/.cache/mesh-data && git add networking-dinners && git commit -m "dinner: <dinner_date> tables composed" && git push
+    git -C ~/.cache/mesh-data remote set-url origin "https://oauth2:${MESH_GH_TOKEN}@github.com/sidpan1/mesh-data"
+    git -C ~/.cache/mesh-data add networking-dinners
+    git -C ~/.cache/mesh-data commit -m "dinner: <dinner_date> tables composed"
+    git -C ~/.cache/mesh-data push
     ```
+    `MESH_GH_TOKEN` must be exported on the founder's shell. Same env var as the user side.
 12. Delete the temp files: `rm -f /tmp/mesh_users.json /tmp/mesh_response.json`.
 13. Print: "Invites pushed. Now WhatsApp the cohort: 'invites live, run /mesh-check'."
 
