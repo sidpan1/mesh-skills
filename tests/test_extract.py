@@ -1,8 +1,19 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from skills.mesh_trajectory.scripts.extract import (
-    extract_corpus, extract_per_session, scrub_message,
+    Session,
+    classify_bucket,
+    extract_corpus,
+    extract_per_session,
+    group_by_project,
+    normalize_slug,
+    scrub_message,
 )
+
+
+def _dt(s: str) -> datetime:
+    return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
 
 
 def _make_jsonl(path: Path, messages: list[dict]):
@@ -234,3 +245,46 @@ def test_extract_per_session_caps_to_max_sessions_keeping_most_recent(tmp_path):
     )
     assert len(sessions) == 3
     assert [s.session_id for s in sessions] == ["s4", "s3", "s2"]
+
+
+def test_normalize_slug_strips_user_home_prefix():
+    assert normalize_slug("-Users-sidhant-workspaces-root-workspace-mesh") == "mesh"
+    assert normalize_slug("-Users-alice-projects-foo-bar") == "foo-bar"
+
+
+def test_normalize_slug_collapses_sage_workspaces_variants():
+    raw = [
+        "-Users-sidhant-workspaces-root-workspace-sage-workspaces",
+        "-Users-sidhant-workspaces-root-workspace-sage-workspaces-workspaces-projec",
+        "-Users-sidhant-workspaces-root-workspace-sage-workspaces-workspaces-projec-abcd1234",
+    ]
+    normalized = [normalize_slug(s) for s in raw]
+    assert len(set(normalized)) == 1
+    assert normalized[0] == "sage-workspaces"
+
+
+def test_group_by_project_collapses_sessions(tmp_path):
+    sessions = [
+        Session(session_id="a", project_slug="-Users-x-mesh", last_seen=_dt("2026-04-26"), corpus="x" * 600),
+        Session(session_id="b", project_slug="-Users-x-mesh", last_seen=_dt("2026-04-25"), corpus="x" * 600),
+        Session(session_id="c", project_slug="-Users-x-chat", last_seen=_dt("2026-04-24"), corpus="x" * 600),
+    ]
+    groups = group_by_project(sessions)
+    assert set(groups.keys()) == {"mesh", "chat"}
+    assert len(groups["mesh"]) == 2
+    assert groups["mesh"][0].session_id == "a"
+
+
+def test_classify_bucket_returns_one_of_four_labels():
+    assert classify_bucket(25) == "CENTRAL"
+    assert classify_bucket(10) == "REGULAR"
+    assert classify_bucket(3) == "OCCASIONAL"
+    assert classify_bucket(1) == "ONE-OFF"
+
+
+def test_classify_bucket_thresholds_inclusive():
+    assert classify_bucket(20) == "CENTRAL"
+    assert classify_bucket(19) == "REGULAR"
+    assert classify_bucket(5) == "REGULAR"
+    assert classify_bucket(4) == "OCCASIONAL"
+    assert classify_bucket(2) == "OCCASIONAL"

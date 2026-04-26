@@ -112,6 +112,55 @@ class Session:
 DEFAULT_EXCLUDE_PROJECTS = frozenset({"subagents"})
 
 
+_USER_HOME_ANCHORED_RE = re.compile(
+    r"^-?Users-.+?-(?:workspaces-(?:root-workspace-)?|projects-)"
+)
+_USER_HOME_FALLBACK_RE = re.compile(r"^-?Users-[^-]+-")
+_WORKSPACES_TAIL_RE = re.compile(r"^(.*?-workspaces)(?:-.*)?$")
+
+
+def normalize_slug(slug: str) -> str:
+    """Collapse path-encoded slug to logical project name.
+
+    Strips '-Users-<name>-workspaces-root-workspace-' (or similar leading
+    user-home path) and collapses trailing path-encoding variants by
+    greatest common prefix at the first '-workspaces' boundary. Usernames
+    may contain hyphens (e.g. macOS home 'sidhant.panda' encodes as
+    'sidhant-panda'), so the user-home strip prefers an anchored match on
+    'workspaces-root-workspace-' or 'projects-' before falling back to the
+    single-token '-Users-<name>-' form.
+    """
+    s = _USER_HOME_ANCHORED_RE.sub("", slug, count=1)
+    if s == slug:
+        s = _USER_HOME_FALLBACK_RE.sub("", slug, count=1)
+    m = _WORKSPACES_TAIL_RE.match(s)
+    if m:
+        return m.group(1)
+    return s
+
+
+def group_by_project(sessions: list[Session]) -> dict[str, list[Session]]:
+    """Group sessions by normalized project slug, most-recent-first within group."""
+    groups: dict[str, list[Session]] = {}
+    for s in sessions:
+        key = normalize_slug(s.project_slug)
+        groups.setdefault(key, []).append(s)
+    for key in groups:
+        groups[key].sort(key=lambda s: s.last_seen, reverse=True)
+    return groups
+
+
+def classify_bucket(session_count: int) -> str:
+    """Return CENTRAL (>=20) | REGULAR (5-19) | OCCASIONAL (2-4) | ONE-OFF (1)."""
+    if session_count >= 20:
+        return "CENTRAL"
+    if session_count >= 5:
+        return "REGULAR"
+    if session_count >= 2:
+        return "OCCASIONAL"
+    return "ONE-OFF"
+
+
 def extract_per_session(
     projects_root: Path = DEFAULT_PROJECTS_ROOT,
     weeks: int = DEFAULT_WEEKS,
