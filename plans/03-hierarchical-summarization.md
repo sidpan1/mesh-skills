@@ -639,3 +639,87 @@ This plan is ready to execute in a fresh Claude Code conversation. Recommended a
 4. Tasks 1-6 are codable. Task 7 is manual (the founder sits at the keyboard).
 5. After Task 7 verifies, append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, verification result, and open items handed off to plan 04.
 6. Then ask the user whether to author plan 04 now.
+
+---
+
+# EXECUTION LOG (2026-04-26)
+
+Executed in a single Claude Code session via `superpowers:subagent-driven-development`. Code commits on this repo: `57602d6`, `3579375`, `eee5f85`, `7699040`, `290af05`, `fdac945`, `fe9c2d7`, `fd4a1ee`. End-to-end verification pushed `ebceb499e004556e2313e6075569d99136da2a81` to `mesh-data` (file `users/sidpan_007_at_gmail_com.md`, sha `69252c60`).
+
+## Task status
+
+| Task | Status | Commit(s) | Notes |
+|---|---|---|---|
+| 1. Slug normalize + group + buckets | DONE | `57602d6`, `3579375` | Original commit shipped plan's verbatim regex; smoke against real corpus revealed it over-collapsed. Mid-flight semantic correction (`3579375`) extracts leaf projects under `-workspaces-(projects\|external\|personal)-` and strips `--`-suffixed worktree encodings. Final test count: 62 (55 baseline + 1 strips with hyphenated-username + 1 group + 2 classify + 1 leaf + 1 monorepo-root + 1 worktree). |
+| 2. Per-project + injection-guard prompts | DONE | `eee5f85`, `7699040` | Original commit shipped both prompts. Pre-existing em-dash from plan 02's `per_session.md` line 1 (introduced before this plan) needed a separate `fix(prompts):` commit to satisfy the project-wide rule. |
+| 3. Rewrite `summarize.md` | DONE | `290af05` | Single clean replacement. Equal-voice rule explicit. `{{digests}}` placeholder removed; `{{project_summaries}}` placeholder added. |
+| 4. LLM-as-judge lint prompt + parser + tests | DONE | `fdac945` | TDD discipline followed: 7 tests RED first, then implementation, then GREEN. Test count 62 -> 69. `LintParseError` subclasses `ValueError`. |
+| 5. SKILL.md flow rewrite | DONE | `fe9c2d7` | 23 steps. Three privacy gates (7/10/14). `AskUserQuestion` per flag in step 16. Heredoc-validated parser invocation in step 15. `/mesh-check` and `/mesh-status` flows untouched. |
+| 6. spec.md update | DONE | `fd4a1ee` | Architecture diagram now shows 3-layer hierarchy + lint pass. D11 row preserved verbatim; D12 (hierarchical recursive summarization) and D13 (LLM-as-judge interactive privacy lint) appended. Privacy section expanded from 5 bullets to 7. |
+| 7. End-to-end manual verification | DONE | `ebceb499` (in mesh-data) | Re-ran `/mesh-trajectory do a sync` against founder's real corpus: 167 sessions extracted, 167 digested across 8 parallel subagents (~3 min wall), 18 logical projects emerged, 15 multi-session projects summarized across 4 parallel subagents (~1 min wall) + 3 singletons passed through, founder approved project review at step 11, inferred why-seed adopted at step 12, 187-word body synthesized at step 13, 7 lint flags surfaced at step 15, all 4 resolution rounds approved REPHRASE at step 16, validator + push succeeded, all `/tmp/mesh_*` deleted. |
+
+## What worked
+
+1. **Hierarchical layer eliminates volume bias.** Plan 02's body was dominated by Software Farms (80/170 sessions, 47%). Plan 03's body has visible voice for ~7 distinct project clusters - software factory, voice-agents (for outbound calling), self-improving substrate, leadership narrative, dogfooding rig, MESH, builders community - because each project gets exactly one slot in the synthesis input regardless of session count. CENTRAL bucket (software-farms-poc, 82 sessions) is texture, not a vote multiplier. Founder approved on first synthesis pass.
+2. **LLM-as-judge privacy lint catches what schema can't.** 7 flags surfaced: 1 medium-severity internal-codename (`agent-native software factory` echoing the founder's `software-farms-poc` repo name), 1 low-severity internal-codename (`self-improving chief-of-staff for the org`), 1 low-severity customer-partner (`production voice-agent stack behind a corporate gateway`), 1 family-health (`household automation agent`), 3 other (`self-evolving home assistant`, `dual-identity workstation`, `his own laptop`). All resolved via REPHRASE; redactions did not break sentence flow, no re-synthesis needed.
+3. **Three-stage privacy gates held cleanly.** Step 7 deleted `/tmp/mesh_sessions.json`, step 10 deleted `/tmp/mesh_groups.json` + `/tmp/mesh_digests.txt`, step 14 deleted `/tmp/mesh_project_summaries.txt` + `/tmp/mesh_why.txt`, step 21 deleted `/tmp/mesh_body.md` + `/tmp/mesh_fm.yaml`. Final `ls /tmp/mesh_*` returns no matches.
+4. **Parallel subagent dispatch scales to two layers.** 8 digest subagents (21 sessions each) finished in ~3 min wall. 4 per-project summarizer subagents finished in ~1 min wall. The controller's main context stayed clean of raw corpora; only the synthesized digests + project summaries crossed back.
+5. **AskUserQuestion bundling reduced friction.** Plan said "one round per flag" (would have been 7 rounds); shipped flow grouped the four parenthetical-clause flags 4-7 into one combined decision. Net: 4 rounds instead of 7. Founder approved the grouping implicitly.
+
+## What didn't work / had to be hardened mid-flight
+
+1. **Slug normalization needed a leaf-project semantic correction (commit `3579375`).** The plan's original `_WORKSPACES_TAIL_RE` regex collapsed `<X>-workspaces-...` slugs to `<X>-workspaces`, which folded software-farms-poc (41 sessions) and managed-agents-platform / ktichenaid / external-sia-claude / personal-sidhant-panda into one 110-session `sage-workspaces` super-bucket - re-introducing the very volume bias plan 03 was built to eliminate (110/168 = 65% concentration, worse than plan 02's 80/170 = 47%). User-approved fix: extract the leaf project under `-workspaces-(projects|external|personal)-` and strip `--`-suffixed worktree encodings. Final: 18 logical projects with software-farms-poc separate from sage-workspaces (82 vs 17 sessions). The plan's original `test_normalize_slug_collapses_sage_workspaces_variants` test was deleted; four new tests lock in the corrected semantic.
+2. **Pre-existing em-dash in plan 02's `per_session.md` (commit `7699040`).** Plan 03 Task 2 mandated "lines 1-22 of `per_session.md` must remain unchanged"; line 1 contained one em-dash from plan 02. Resolved by an additional fix commit between Task 2 and Task 3.
+3. **`/mesh-trajectory` slash-command body cached at session start.** When the founder ran `/mesh-trajectory do a sync` after Task 5 had been committed, Claude Code delivered the OLD plan-01 single-corpus flow body (cached at session start, before commit `fe9c2d7`). The disk file WAS the new 23-step flow; only the slash-command-rendered body was stale. Tools (Bash, Read, Write) ran against disk so the runtime followed the new flow correctly, but a less-careful operator could have run the old steps. **Required mitigation in plan 04: SKILL.md edits demand a session restart before verification.**
+4. **Slash commands `/mesh-onboard`, `/mesh-sync`, `/mesh-check`, `/mesh-status` are not actually registered.** Only `/mesh-trajectory` is. The four sub-flows are conceptual routing inside one skill: the controller picks the flow based on the user's free-text arg ("do a sync" -> `/mesh-sync` flow). SKILL.md and ONBOARD.md document them as separate commands - this is a doc bug going back to plan 01. Founder noticed mid-session ("I do not see any of the other skills/commands also").
+5. **Digest UUID off-by-one during normalization.** Of 167 sessions, 166 got correctly attributed to digests; one ktichenaid session (`1fbd67f5-...`) was lost and replaced by a duplicate-or-fabricated UUID (`909cf342-...`) for a different software-farms-poc autosolver session. Suspected cause: one of the 8 digest subagents emitted a digest line with a UUID that didn't match the session it was reading (likely picked up a UUID from corpus body text or hallucinated one). Net effect: 166/167 correct, ktichenaid summary built from 2 of 3 sessions. Material impact on the body: zero (ktichenaid still got its slot; the autosolver content is a software-farms-poc detail and didn't surface in the body).
+6. **`me-private-projects-hermes-admin` and `hermes-admin` are the same logical project but split.** Slug normalization didn't catch the `-me-private-projects-` variant. Both got their own slot in the synthesis input. The body's "self-modifying agent" thread held together because the lint resolution rephrased the whole dogfooding clause; otherwise this would have caused fragmented framing.
+
+## Hardenings beyond the original plan
+
+1. **Slug normalization tests extended for hyphenated usernames.** Plan's original test only covered `-Users-sidhant-...`; macOS encodes `.` as `-` so `sidhant.panda` became `sidhant-panda`, breaking the original `[^-]+` regex. Test `test_normalize_slug_strips_user_home_prefix` extended with `-Users-sidhant-panda-workspaces-root-workspace-mesh -> mesh` to lock in the contract.
+2. **Slug normalization handles claude-worktrees + repos suffixes.** Real corpus surfaced two distinct `--`-encoded suffix patterns: `--repos-<repo>--<branch>` (29 software-farms-poc variants from sub-2-X gate iterations) and `--claude-worktrees-<adjective>-<noun>-<hash>` (one hermes-admin variant). Both collapse to the base project. New test `test_normalize_slug_strips_claude_worktree_suffix` covers both forms.
+3. **Per-batch summarizer parallelism.** Plan said "you, Claude, run this loop in your response". Reality at 15 multi-session projects with 8-120 word outputs each would overflow the controller's context. Shipped pattern: 4 parallel summarizer subagents (1 / 3 / 5 / 6 projects) writing to `/tmp/mesh_proj_summaries/<project>.txt`, then a deterministic Python concat into `/tmp/mesh_project_summaries.txt`. Worth canonicalizing in plan 04's SKILL.md update.
+4. **AskUserQuestion grouping for adjacent flags.** Lint flags 4-7 (home-assistant, household-automation, dual-identity, his-own-laptop) all sat in one parenthetical clause about the dogfooding rig. Shipped flow grouped them into one resolution decision so the founder didn't have to answer four near-identical questions. Worth canonicalizing.
+
+## Mid-flight architectural changes
+
+1. **Slug normalization semantic.** Plan 03's original assumption was "monorepo path-encoded variants are noise; collapse them." Reality is "monorepos contain genuinely distinct leaf projects; preserve them." Captured as a one-commit correction (`3579375`) with new tests, not a plan rewrite.
+2. **No schema, validator, or push pipeline changes.** All hardenings landed in `extract.py`, prompt files, `SKILL.md`, and the new `lint_body.py` + `lint_body.md`. The 8-field schema is still frozen. The pre-push validator still REFUSES non-schema fields. The push script is unchanged from plan 01.
+
+## Verification result
+
+End-to-end success on the founder's real corpus.
+
+- 167 sessions across 18 logical projects (versus plan 02's 170 across 61 raw slugs at the same window).
+- Bucket distribution: 1 CENTRAL (software-farms-poc, 82), 5 REGULAR (sage-workspaces 17, chat 14, voice-agents 12, mesh 6, panda 5), 9 OCCASIONAL (4 each: work-mcp-builders-club-fe, hermes-admin, work-mcp-im-mcp-server, managed-agents-platform; 3 each: agentstack-sdk, agent-server; 2 each: ktichenaid, me-private-projects-hermes-admin, sia-claude), 3 ONE-OFF (sidhant-panda promotion-doc, workspace-manager, panda-Downloads-visualizer).
+- Synthesis pass produced 187 words on first try; founder approved.
+- Privacy lint surfaced 7 flags; all resolved via REPHRASE; sentence flow held; no re-synthesis needed.
+- Push committed `ebceb499` to `mesh-data`. File `users/sidpan_007_at_gmail_com.md` size 1666 bytes.
+- Final body lives at `https://github.com/sidpan1/mesh-data/blob/main/users/sidpan_007_at_gmail_com.md`.
+- All `/tmp/mesh_*` deleted. Privacy contract held.
+
+## Open items handed off to plan 04
+
+1. **Slash-command registration gap.** `/mesh-onboard`, `/mesh-sync`, `/mesh-check`, `/mesh-status` need to be either (a) split into `commands/*.md` files so they're real registered commands, OR (b) demoted in SKILL.md + ONBOARD.md to honest "subflows of `/mesh-trajectory <action>`". Path (a) is the right product surface; path (b) is the cheap doc fix.
+2. **Hermes-admin slug fragmentation.** Slug normalization should collapse `-me-private-projects-<X>` and `-<X>` variants for the same `<X>` (so `me-private-projects-hermes-admin` and `hermes-admin` become one bucket). Real corpus showed the founder hits both paths.
+3. **Digest UUID integrity.** Normalization should reconcile each digest line's UUID against the original session_id allowlist; a digest emitted with an unknown UUID should be flagged and either dropped or re-attributed via fuzzy match. Today, the off-by-one slipped through silently.
+4. **Per-project digest cache.** Plan 02 deferred this; plan 03 didn't pick it up. At 167 sessions, the digest pass is 8 parallel subagents x ~3 min = ~24 subagent-min per `/mesh-sync`. Caching `~/.config/mesh/sessions/<UUID>.summary.md` and only re-digesting NEW sessions cuts ~95% of that work on weekly syncs.
+5. **`/mesh-orchestrate` end-to-end dry-run still pending.** Plan 02 deferred; plan 03 didn't address. First Friday after a second onboarded user is the natural moment.
+6. **Iteration 1's `cdb29cb` "founder-ping error" path still unexercised.** Access worked in both plan 02 and plan 03 verifications.
+7. **Session-start caching of SKILL.md.** Document in CLAUDE.md that SKILL.md edits require a session restart before verification, OR add a runtime check in the slash command that re-reads SKILL.md from disk before executing.
+8. **`AskUserQuestion` flag grouping.** SKILL.md step 16 says "use AskUserQuestion with three options"; the verification run grouped 4 adjacent-clause flags into one round to reduce friction. SKILL.md should canonicalize this: "group flags that share a clause into a single decision."
+9. **Per-project summarizer parallelism.** SKILL.md step 9 says "you, Claude, run this loop in your response". For 15+ multi-session projects this overflows controller context. SKILL.md should canonicalize the parallel-subagent pattern that the verification run actually used.
+10. **Plan 02's deferred items still open.** `subagents`-filter heuristic generalization (structural detection vs slug-name) remains un-done. `/tmp/mesh_sessions.json` 256KB read-limit friction was hit again in this run; plan 04 should make `extract_per_session` write per-session files directly.
+
+## Self-review checklist
+
+- [x] All tests pass (target: 60 + 7 lint = 67). **Actual: 69** (62 from Task 1's 7 new tests + 7 from Task 4).
+- [x] Slug normalization on founder corpus collapses sage-workspaces variants - but to LEAF projects, not to the parent monorepo. The plan's original assumption was inverted; the corrected semantic separates software-farms-poc, managed-agents-platform, sia-claude, sidhant-panda from the sage-workspaces parent.
+- [x] Per-project summaries for the founder's real corpus read at INITIATIVE level. Verified at the founder's step-11 review.
+- [x] Final body has visible voice for 4+ distinct projects. Actual count: ~7 (software factory, voice-agents, self-improving substrate, leadership narrative, dogfooding rig, MESH, builders community).
+- [x] Privacy lint flags at least one item AND AskUserQuestion correctly resolves keep/redact/rephrase. Actual: 7 flags, all REPHRASE, all applied successfully.
+- [x] All temp files at `/tmp/mesh_*` are absent after the skill exits.
+- [x] spec.md architecture section + Decision Framework + Privacy section reflect the new pipeline.
+- [x] Plans 01 and 02's commits are NOT rewritten; plan 03 only adds and modifies files.
+- [x] Plan 02's deferred items not picked up here are explicitly listed under "Open items handed off to plan 04" (item 10).
