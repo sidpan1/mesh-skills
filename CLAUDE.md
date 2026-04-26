@@ -42,27 +42,69 @@ The user-side skill extracts -> summarizes (via local Claude) -> validates -> pu
 
 We work iteration by iteration. Each iteration has its own plan file under `plans/`, numbered `01-`, `02-`, … The number is the order of authoring; once a plan is started it is **append-only** (do not rewrite history — append an EXECUTION LOG instead).
 
-**Conventions:**
+### START-OF-SESSION DECISION TREE (do this FIRST, every session)
+
+```
+                    NEW CONVERSATION OPENS
+                              │
+                              ▼
+              Read CLAUDE.md + spec.md  (you are here)
+                              │
+                              ▼
+                       `ls plans/`
+                              │
+                              ▼
+              Look at the HIGHEST-NUMBERED plan
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+       Has EXECUTION LOG                Has NO EXECUTION LOG
+       at the bottom?                   at the bottom?
+              │                               │
+        ✓ COMPLETE                       ⏳ INCOMPLETE
+              │                               │
+              ▼                               ▼
+   ┌────────────────────────┐    ┌─────────────────────────┐
+   │ Surface to the user:    │    │ Read this plan IN FULL  │
+   │  - what shipped         │    │ + read the EXECUTION    │
+   │  - what's open          │    │ LOG of the previous     │
+   │  - propose next plan    │    │ plan (if any).          │
+   │  OR ask "what next?"    │    │                         │
+   │                         │    │ This plan IS your work. │
+   │ Do NOT start coding     │    │ Walk it task by task.   │
+   │ until the user picks    │    │                         │
+   │ a direction.            │    │ When done, append the   │
+   └────────────────────────┘    │ EXECUTION LOG. Then      │
+                                  │ ask user about next.    │
+                                  └─────────────────────────┘
+```
+
+**The two paths in plain words:**
+
+**Path A — latest plan is COMPLETE (has EXECUTION LOG appendix):**
+  → No active work. Read the EXECUTION LOG to know what shipped and what's open.
+  → Surface a one-paragraph summary to the user + propose 1-3 candidate next plans (informed by the "Open items handed off" section of the most recent log).
+  → ASK before authoring a new plan or starting code. Do not assume.
+
+**Path B — latest plan is INCOMPLETE (no EXECUTION LOG appendix):**
+  → That plan IS your work. No question to ask the user; just go.
+  → Read the plan in full + the EXECUTION LOG of the previous plan (if any) for context on prior decisions and pitfalls.
+  → Use `superpowers:subagent-driven-development` (or inline if small) to walk the tasks.
+  → When the iteration ends — whether you finished, partially finished, or hit a blocker — append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHA), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, verification result, and open items handed off to the next plan.
+  → Then ask the user whether to author the next plan now.
+
+### END-OF-SESSION CHECKLIST
+
+1. The active plan has an EXECUTION LOG appendix that reflects everything that happened in this session.
+2. If the iteration produced learnings that need a follow-on plan, `plans/NN+1-*.md` is written while the context is fresh.
+3. Both files are committed in one commit.
+
+### Conventions (read once)
 
 - **One plan per iteration.** A plan is "ready to execute in a single fresh Claude Code session". When scope grows beyond that, split into the next plan.
-- **Latest unexecuted plan = your starting point.** When you open this repo, find the plan with no EXECUTION LOG appendix at the bottom. That is the active plan. If all plans have execution logs, ask the user before starting a new one.
 - **Each plan is self-contained.** It must brief a fresh Claude that has never seen prior conversations. Reference earlier plans by filename when needed; do not assume the reader has the context.
-- **Append, don't rewrite.** When an iteration completes (or stops), add an `# EXECUTION LOG (appended YYYY-MM-DD)` section at the bottom of that plan. Cover: task status (DONE / NOT DONE / SKIPPED + commit SHA), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, verification result, and open items handed off to the next plan.
+- **Append, don't rewrite.** EXECUTION LOG is the only structured way to record what happened. Never edit a plan's body after execution starts.
 - **Author the next plan only after the current one's execution log is written.** The next plan should reference what didn't work in the previous one and what's being deferred.
-
-**Workflow at the start of a session:**
-
-1. Read `CLAUDE.md` (this file) and `spec.md`.
-2. `ls plans/` to see all iterations. Read each plan's first ~30 lines to get the gist; read the EXECUTION LOG of the most recent completed plan in full.
-3. Pick the latest plan with no EXECUTION LOG. That's your work.
-4. Use `superpowers:subagent-driven-development` (or inline execution if scope is small) to walk the plan task by task.
-5. When done (or when stopping), append the EXECUTION LOG to the plan you executed, then optionally author the next plan.
-
-**Workflow at the end of a session:**
-
-1. Update the EXECUTION LOG of the active plan with everything that happened.
-2. If the iteration produced learnings that change the next plan, write `plans/NN+1-*.md` now while the context is fresh.
-3. Commit both files in one commit.
 
 ## Code layout (planned, see plans/01-v0-tdd-build.md File Structure for the full tree)
 
