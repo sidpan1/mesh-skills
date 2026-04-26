@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from skills.mesh_trajectory.scripts.extract import (
-    extract_corpus, scrub_message,
+    extract_corpus, extract_per_session, scrub_message,
 )
 
 
@@ -147,3 +147,43 @@ def test_corpus_is_capped_to_max_chars(tmp_path):
     ])
     corpus = extract_corpus(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z", max_chars=5000)
     assert len(corpus) <= 5000
+
+
+def test_extract_per_session_returns_one_corpus_per_session(tmp_path):
+    proj = tmp_path / "proj-a"
+    _make_jsonl(proj / "uuid-aaa.jsonl", [
+        _msg("user", "session A msg 1", "2026-04-22T10:00:00Z"),
+        _msg("assistant", "session A msg 2", "2026-04-22T10:00:05Z"),
+    ])
+    _make_jsonl(proj / "uuid-bbb.jsonl", [
+        _msg("user", "session B msg 1", "2026-04-23T10:00:00Z"),
+    ])
+    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    assert len(sessions) == 2
+    assert sessions[0].session_id == "uuid-bbb"
+    assert sessions[1].session_id == "uuid-aaa"
+    assert "session B msg 1" in sessions[0].corpus
+    assert "session A msg 1" in sessions[1].corpus
+
+
+def test_extract_per_session_skips_sessions_outside_window(tmp_path):
+    proj = tmp_path / "proj"
+    _make_jsonl(proj / "old.jsonl", [
+        _msg("user", "OLD", "2026-01-01T00:00:00Z"),
+    ])
+    _make_jsonl(proj / "new.jsonl", [
+        _msg("user", "NEW", "2026-04-22T00:00:00Z"),
+    ])
+    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    assert len(sessions) == 1
+    assert sessions[0].session_id == "new"
+
+
+def test_extract_per_session_drops_empty_sessions(tmp_path):
+    proj = tmp_path / "proj"
+    _make_jsonl(proj / "noise.jsonl", [
+        {"type": "system", "timestamp": "2026-04-22T10:00:00Z", "message": {"role": "system", "content": "noise"}},
+        {"type": "file-history-snapshot", "timestamp": "2026-04-22T10:00:01Z", "snapshot": "x"},
+    ])
+    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    assert sessions == []

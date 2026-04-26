@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -98,6 +99,68 @@ def extract_corpus(
 
     corpus = "\n\n".join(chunks)
     return corpus[:max_chars]
+
+
+@dataclass
+class Session:
+    session_id: str
+    project_slug: str
+    last_seen: datetime
+    corpus: str
+
+
+def extract_per_session(
+    projects_root: Path = DEFAULT_PROJECTS_ROOT,
+    weeks: int = DEFAULT_WEEKS,
+    now: str | None = None,
+    max_chars_per_session: int = 8_000,
+) -> list[Session]:
+    cutoff = (
+        _parse_ts(now) if now else datetime.now(timezone.utc)
+    ) - timedelta(weeks=weeks)
+
+    sessions: list[Session] = []
+    for jsonl in sorted(projects_root.rglob("*.jsonl")):
+        chunks: list[str] = []
+        last_seen: datetime | None = None
+        for line in jsonl.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") not in ("user", "assistant"):
+                continue
+            ts_str = msg.get("timestamp")
+            if not ts_str:
+                continue
+            try:
+                ts = _parse_ts(ts_str)
+            except ValueError:
+                continue
+            if ts < cutoff:
+                continue
+            text = _extract_text(msg.get("message"))
+            if not text.strip():
+                continue
+            chunks.append(f"[{msg['type']}] {scrub_message(text)}")
+            if last_seen is None or ts > last_seen:
+                last_seen = ts
+
+        if not chunks or last_seen is None:
+            continue
+
+        corpus = "\n\n".join(chunks)[:max_chars_per_session]
+        sessions.append(Session(
+            session_id=jsonl.stem,
+            project_slug=jsonl.parent.name,
+            last_seen=last_seen,
+            corpus=corpus,
+        ))
+
+    sessions.sort(key=lambda s: s.last_seen, reverse=True)
+    return sessions
 
 
 def _extract_text(inner) -> str:
