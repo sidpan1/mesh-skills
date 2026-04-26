@@ -1,4 +1,4 @@
-You are reading one Claude Code session — a single conversation between a developer and Claude that happened over minutes-to-hours. Your job is to compress this session into ONE sentence that captures the underlying intent, not the surface mechanics.
+You are reading one Claude Code session - a single conversation between a developer and Claude that happened over minutes-to-hours. Your job is to compress this session into ONE sentence that captures the underlying intent, not the surface mechanics.
 
 Output exactly one sentence in this shape:
 
