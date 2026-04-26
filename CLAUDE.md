@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MESH V0: AI-curated professional dinners for builders in Bengaluru. The product reads what a user is building (from their local Claude Code session history), summarizes it into a 200-word trajectory, and matches them with 5 other builders for a Saturday-7pm dinner.
 
-This repo (`mesh-skills`) is currently **pre-code**. The artifacts that exist are:
-- `spec.md`: the V0 contract (vision, decision framework D1-D11, architecture, data schema, failure modes, verification, success criteria).
-- `plan.md`: the bite-sized TDD implementation plan (tasks T0-T13) for a 7-day sprint ending in a 30-person launch event on 2026-05-01 and dinner #1 on Saturday 2026-05-09.
+Anchor docs:
+- `spec.md`: the V0 contract (vision, decision framework D1-D11, architecture, data schema, failure modes, verification, success criteria). The architectural rationale.
+- `plans/`: numbered iterations, each one self-contained — see "Iterative plans workflow" below. Always work from the latest unexecuted plan.
 
-Read `spec.md` first, then `plan.md`. Every architectural decision is justified in the Decision Framework table in `spec.md`; if you find yourself wanting to revisit a choice, find it in D1-D11 first to see what alternatives were rejected and why.
+Read `spec.md` first to understand the product. Then read the latest plan in `plans/` and the EXECUTION LOG appendices on prior plans to understand what's already been built and what hasn't worked. Every architectural decision is justified in the Decision Framework table in `spec.md`; if you find yourself wanting to revisit a choice, find it in D1-D11 first to see what alternatives were rejected and why.
 
 ## Hard constraints (these override defaults)
 
@@ -22,7 +22,7 @@ Read `spec.md` first, then `plan.md`. Every architectural decision is justified 
 
 4. **Raw Claude Code conversations never leave the user's device.** Only the validated 8-field payload (which includes a 200-word trajectory body the user reviewed and edited) is uploaded. The extractor (`extract.py`) writes to `/tmp/mesh_corpus.txt` and that file must be deleted before the skill exits.
 
-5. **Build only what's in the plan.** The spec lists what is out of scope for V0 (embeddings, velocity matching, hosts marketplace, agent API, web app, plugin platform, payments, multi-city, recursive memory consolidation). Do not build any of these in V0. If a task requires one, stop and ask.
+5. **Build only what's in the active plan.** Each iteration has its own plan in `plans/NN-*.md`. Don't pull V0.1+ ideas into the current iteration. If a task requires something out of scope, stop and ask — that's a signal to either close out the current plan or start the next one.
 
 ## Architecture in one diagram
 
@@ -38,7 +38,33 @@ mesh-trajectory skill   --git push-->   mesh-data repo  <--push-- mesh-orchestra
 
 The user-side skill extracts -> summarizes (via local Claude) -> validates -> pushes. The founder-side skill loads -> asks Claude to compose tables -> validates JSON -> writes invites -> pushes. The user-side skill's `/mesh-check` pulls and renders.
 
-## Code layout (planned, see plan.md File Structure for the full tree)
+## Iterative plans workflow
+
+We work iteration by iteration. Each iteration has its own plan file under `plans/`, numbered `01-`, `02-`, … The number is the order of authoring; once a plan is started it is **append-only** (do not rewrite history — append an EXECUTION LOG instead).
+
+**Conventions:**
+
+- **One plan per iteration.** A plan is "ready to execute in a single fresh Claude Code session". When scope grows beyond that, split into the next plan.
+- **Latest unexecuted plan = your starting point.** When you open this repo, find the plan with no EXECUTION LOG appendix at the bottom. That is the active plan. If all plans have execution logs, ask the user before starting a new one.
+- **Each plan is self-contained.** It must brief a fresh Claude that has never seen prior conversations. Reference earlier plans by filename when needed; do not assume the reader has the context.
+- **Append, don't rewrite.** When an iteration completes (or stops), add an `# EXECUTION LOG (appended YYYY-MM-DD)` section at the bottom of that plan. Cover: task status (DONE / NOT DONE / SKIPPED + commit SHA), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, verification result, and open items handed off to the next plan.
+- **Author the next plan only after the current one's execution log is written.** The next plan should reference what didn't work in the previous one and what's being deferred.
+
+**Workflow at the start of a session:**
+
+1. Read `CLAUDE.md` (this file) and `spec.md`.
+2. `ls plans/` to see all iterations. Read each plan's first ~30 lines to get the gist; read the EXECUTION LOG of the most recent completed plan in full.
+3. Pick the latest plan with no EXECUTION LOG. That's your work.
+4. Use `superpowers:subagent-driven-development` (or inline execution if scope is small) to walk the plan task by task.
+5. When done (or when stopping), append the EXECUTION LOG to the plan you executed, then optionally author the next plan.
+
+**Workflow at the end of a session:**
+
+1. Update the EXECUTION LOG of the active plan with everything that happened.
+2. If the iteration produced learnings that change the next plan, write `plans/NN+1-*.md` now while the context is fresh.
+3. Commit both files in one commit.
+
+## Code layout (planned, see plans/01-v0-tdd-build.md File Structure for the full tree)
 
 - `skills/mesh_trajectory/` (underscore for Python import; dashed name `mesh-trajectory` is a symlink for Claude Code skill discovery)
 - `skills/mesh_orchestrator/` (same naming convention)
@@ -52,21 +78,19 @@ Python packages use **underscores**: `skills/mesh_trajectory/`, `skills/mesh_orc
 
 ## Commands
 
-The repo has no code yet. Once Task T0 from `plan.md` is complete:
-
 ```bash
-# setup
+# setup (one-time)
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # run all tests
-pytest
+.venv/bin/pytest
 
 # run one test file
-pytest tests/test_validate.py -v
+.venv/bin/pytest tests/test_validate.py -v
 
 # run one test
-pytest tests/test_validate.py::test_extra_field_is_refused -v
+.venv/bin/pytest tests/test_validate.py::test_extra_field_is_refused -v
 ```
 
 Skill invocation (after install per `ONBOARD.md`):
@@ -80,9 +104,9 @@ Skill invocation (after install per `ONBOARD.md`):
 - **Adding a slash command**: register it in the relevant `SKILL.md` and document it in this file's Commands section. Keep flows in `SKILL.md` (instructions for Claude); keep deterministic logic in `scripts/` (Python with pytest coverage).
 - **Touching the failure-mode list in spec.md**: every failure mode must have a mitigation that is either implemented in V0 code or explicitly deferred to V0.1. Don't add a failure mode without saying which.
 
-## TDD discipline (per plan.md)
+## TDD discipline
 
-Every task in `plan.md` follows: write failing test -> run, see it fail -> implement minimally -> run, see pass -> commit. Do not skip steps. Do not batch. The plan is structured so each task produces a green test suite and a single commit.
+Every task in every plan follows: write failing test -> run, see it fail -> implement minimally -> run, see pass -> commit. Do not skip steps. Do not batch. Plans are structured so each task produces a green test suite and a single commit. The synthetic-test trap from iteration 1 (passing tests against fake data shape that didn't match real Claude Code session files) is the cautionary tale: when reading user-machine data, write at least one test that runs against a real fixture.
 
 ## Out of scope reminders
 
@@ -92,6 +116,8 @@ Every task in `plan.md` follows: write failing test -> run, see it fail -> imple
 - No multi-city. `city` is hard-filtered to "Bengaluru" in `validate.py`.
 - No host marketplace, no payments, no agent-native API. All deferred to V0.1+.
 
-## Current status (as of 2026-04-25)
+## Current status
 
-Pre-code. Next action is Task T0 in `plan.md`: initialize git, write `pyproject.toml`, create the private `mesh-data` repo. The 7-day build window ends on Friday 2026-05-01 with the launch event; dinner #1 is Saturday 2026-05-09.
+Always check `plans/` for the latest iteration. As of the most recent commit, iteration 1 (`plans/01-v0-tdd-build.md`) is complete and has an EXECUTION LOG documenting what shipped + what blocked. The active plan is the most recent one without an EXECUTION LOG appendix.
+
+Build window references in older plans are anchored to specific dates (launch event 2026-05-01, dinner #1 on 2026-05-09); treat those as targets that may have shifted — read the EXECUTION LOG appendices to confirm current dates.

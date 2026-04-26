@@ -1804,12 +1804,90 @@ Type consistency: `User` dataclass in T7, parsed from frontmatter dict produced 
 
 # Execution Handoff
 
-Plan complete and saved to `/Users/sidhant.panda/workspaces/root-workspace/mesh/plan.md`.
+Plan complete. See execution log below for what actually happened when this plan ran.
 
-Two execution options:
+---
 
-**1. Subagent-Driven (recommended)**: I dispatch a fresh subagent per task, review between tasks, fast iteration.
+# EXECUTION LOG (appended 2026-04-26)
 
-**2. Inline Execution**: Execute tasks in this session using `superpowers:executing-plans`, batch execution with checkpoints.
+Iteration 1 was executed via `superpowers:subagent-driven-development`. Each task was implemented by a fresh haiku subagent with TDD discipline, then reviewed by a spec-compliance subagent and a code-quality subagent (sonnet for the security-sensitive ones: T3 extractor, T4 push). T0 was executed directly by the controller because it had GitHub side-effects.
 
-Tell me which approach.
+## Task status
+
+| # | Task | Status | Final commit | Notes |
+|---|---|---|---|---|
+| T0 | Bootstrap (git, venv, mesh-data repo) | ✓ DONE | 58bbbea | Created sidpan1/mesh-data (private). mesh-skills repo NOT pushed to GitHub by user choice. |
+| T1 | Schema | ✓ DONE | eedc78b | Frozen sets after code-quality review. |
+| T2 | Validator | ✓ DONE | 96e2ce2 | Hardened to refuse malformed YAML frontmatter (missing closing `---`, empty FM, non-mapping). |
+| T3 | Extractor | ✓ DONE | b9b3204, cdb29cb | **Critical fix:** original code read `conversation.jsonl` with flat `{role,content,ts}` structure; real Claude Code format is `<UUID>.jsonl` with nested `{type, message:{role,content:[{type:text,text}]}, timestamp}`. Tests passed against synthetic format but produced empty corpus on real data. Final review caught this; code rewritten to handle real format. Also expanded scrubbing: GitHub PATs (gh[pousr]_), AWS keys (AKIA*), `*_TOKEN`/`*_SECRET` env vars; URLs preserved through path-scrub via stash/restore. |
+| T4 | Push script | ✓ DONE | 8e00c82, 25521e5 | Hardened: token scrubbed from stderr on git failure, `_authed_url` tested. **Then later replaced entirely** when the user dropped the PAT model — see "Mid-flight architectural change" below. |
+| T5 | mesh-trajectory SKILL.md + summarize prompt | ✓ DONE | 4bfc124, cdb29cb | Added explicit `rm -f /tmp/mesh_corpus.txt` immediately after summarization. Switched all `python` invocations to absolute path `~/.claude/skills/mesh-skills/.venv/bin/python` because Claude Code bash runs from user's CWD, not skill dir. Added `~/.config/mesh/profile.yaml` persistence step so `/mesh-sync` doesn't re-ask Q&A. |
+| T6 | render_invite | ✓ DONE | ac7d4e1 | Trivial; no review surfaced issues. |
+| T7 | load_users | ✓ DONE | a7d0b43, cdb29cb | Added unquoted-ISO-date coercion (`str(s) for s in ...`) so hand-edited user files don't silently fail to match. |
+| T8 | Compose prompt + parse_response | ✓ DONE | 33aff27, 0795f41 | **Important fix:** original code rejected tables of size != 6 or 7 even when `low_quorum: true`, contradicting the prompt that says "if total < 12, output one table only". Added low_quorum branch (size 2-7), type-checks for tables/attendees being lists, support for ` ``` ` and `~~~` fences (with/without language tag). |
+| T9 | write_invites | ✓ DONE | 1273653 | Trivial. |
+| T10 | mesh-orchestrator SKILL.md | ✓ DONE | fb6f3db, 25521e5 | Initially injected MESH_GH_TOKEN; later removed when auth model changed. |
+| T11 | ONBOARD.md | ✓ DONE | c10de4e, 25521e5 | Initially had PAT-collection step; later replaced with `git ls-remote` precheck. Visible founder reminder block added at top (must be removed before distribution). |
+| T12 | Dogfood with 5 friends | ⏸ NOT DONE | — | Manual; never recruited. Self-onboard (Phase 2 of verification) hit the bias problem before reaching 5-friend stage. |
+| T13 | Launch event prep | ⏸ NOT DONE | — | Manual; pending. |
+
+## What worked
+
+- **TDD discipline + subagent-driven dispatch.** Per-task implementer + spec reviewer + code-quality reviewer caught real defects every cycle. Spec reviewers caught zero false positives; code-quality reviewers each found at least one Important fix that the implementer missed.
+- **Frozen sets** for schema constants. One-line change, prevents a whole class of contract-corruption bugs.
+- **Validator-before-write** in `push.py`. The privacy gate has not been bypassable in any iteration.
+- **Token scrub in stderr.** Defensive; not strictly necessary against current GitHub git versions but cheap insurance.
+- **End-of-iteration sub-Claude review of the entire branch.** This is what caught the showstopper extractor bug (synthetic test format ≠ real Claude Code format). Without this, dogfood would have produced empty corpora on every friend's machine.
+
+## What didn't work
+
+- **Synthetic test data masked a real-world incompatibility.** The original `test_extract.py` constructed jsonl in a flat `{role, content, timestamp}` shape that bore no resemblance to actual Claude Code session files. All tests passed; the code did not work. **Lesson: when reading user-machine data, write at least one test that reads against a real fixture from the user's actual `~/.claude/projects/`.** Only the final-review pass (sonnet, end-to-end) caught this — per-task reviewers had no incentive to question the test fixture format.
+- **The summarize prompt is biased toward "how" over "why".** Self-onboard run produced a stack-heavy 230-word body (DeepAgentsJS, LangGraph, MCP, Fly.io). User flagged: "It seems too technical (the how) rather than the intent (the what and why)". Two root causes: (1) the corpus only captures debugging *transactions* with Claude, not the user's underlying *intent*; (2) the prompt's "maximize semantic density" constraint unintentionally rewards stack words because they ARE dense. **This blocked the dogfood.**
+- **Single-shot summarization over a 60K corpus** loses signal in the noise. Frequency of mention (LangGraph appears 30+ times) gets pattern-matched as importance, even when the underlying activity (multi-tenant agent platform productionization) is what actually matters.
+- **Spec.md deferred recursive memory consolidation to V0.1.** This was the wrong call given the bias problem above. Should have shipped recursive summarization in V0.
+
+## Hardenings applied beyond the original plan
+
+- Frozen schema sets (T1)
+- Validator refuses malformed YAML frontmatter cleanly (T2)
+- Extractor: real Claude Code format (T3, post-final-review)
+- Extractor: GitHub PAT, AWS key, _TOKEN/_SECRET env-var scrubbing (T3, code-quality review)
+- Extractor: URL preservation through path scrub (T3, code-quality review)
+- Push: token redacted from stderr (T4)
+- Push: `_authed_url` test coverage (T4) — later removed with auth model change
+- parse_response: `low_quorum` size relaxation, type-checks (T8, code-quality review)
+- parse_response: `~~~` fences, language-tag-less fences (T8)
+- load_users: unquoted-ISO-date coercion (T7, post-final-review)
+- SKILL.md: absolute python path; profile.yaml persistence; corpus deletion at step 7 not at end (T5, post-final-review)
+- ONBOARD.md: token persistence to `~/.config/mesh/env` sourced from .zshrc/.bashrc (T11) — later removed with auth model change
+
+## Mid-flight architectural change: dropped MESH_GH_TOKEN
+
+After T11, user instructed: "assume the user has git installed in his local setup. So we will be using that instead, not anything else. Just check and flag if they don't have access." Implemented:
+
+- Removed `_authed_url`, `_scrub_token`, MESH_GH_TOKEN env-var handling from push.py
+- Added `check_repo_access(repo_url)` using `git ls-remote --exit-code` with a user-friendly "ping the founder for access" error
+- Removed PAT step from ONBOARD.md, replaced with one-line `git ls-remote` precheck
+- Removed token injection from orchestrator SKILL.md push step
+- Replaced 4 PAT/scrub tests with 3 access-precheck tests (using local file:// bare repo so no network)
+
+Net: 5 PAT tests removed, 3 access tests added → 49 total tests passing.
+
+## Verification result
+
+| Phase | Outcome |
+|---|---|
+| Phase 1: code-level smoke (4 commands) | ✓ All four green: 49 tests pass; `git ls-remote` reaches mesh-data; extract on real corpus produces 61KB; render_invite formats cleanly. |
+| Phase 2: self-onboard as user #1 | ✗ Stopped at trajectory body review. The body was technically valid (passes validator: 233 words, all schema fields, Bengaluru, no extra fields) but failed the product test: too "how", not enough "why". User declined to push. |
+| Phase 3: orchestrator dry-run | ⏸ Not attempted (Phase 2 blocked first). |
+
+## Open items handed off to plan 02
+
+- **Recursive summarization** (per-session → synthesis) to fix the intent-vs-stack bias.
+- **Intent-first prompt rewrite** (`summarize.md`) demanding WHO and WHY before WHAT.
+- **User "why" seed question** added to `/mesh-onboard` so the user can directly inject their motivation (the model can't infer it from debugging chatter alone).
+- Re-run Phase 2 verification after the above land.
+- Then T12 (dogfood with 5 friends) and T13 (launch event prep) become unblocked.
+- One ops item: push `mesh-skills` to public GitHub before sending ONBOARD.md to anyone.
+- One ops item: remove the founder pre-launch reminder block at the top of ONBOARD.md before distribution.
+
