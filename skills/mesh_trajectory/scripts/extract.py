@@ -112,30 +112,49 @@ class Session:
 DEFAULT_EXCLUDE_PROJECTS = frozenset({"subagents"})
 
 
-_USER_HOME_ANCHORED_RE = re.compile(
-    r"^-?Users-.+?-(?:workspaces-(?:root-workspace-)?|projects-)"
+_WORKSPACE_ROOT_ANCHOR = "workspaces-root-workspace-"
+_PROJECTS_ANCHOR = "projects-"
+_LEAF_SEGMENTS = (
+    "-workspaces-projects-",
+    "-workspaces-external-",
+    "-workspaces-personal-",
 )
-_USER_HOME_FALLBACK_RE = re.compile(r"^-?Users-[^-]+-")
-_WORKSPACES_TAIL_RE = re.compile(r"^(.*?-workspaces)(?:-.*)?$")
 
 
 def normalize_slug(slug: str) -> str:
     """Collapse path-encoded slug to logical project name.
 
-    Strips '-Users-<name>-workspaces-root-workspace-' (or similar leading
-    user-home path) and collapses trailing path-encoding variants by
-    greatest common prefix at the first '-workspaces' boundary. Usernames
-    may contain hyphens (e.g. macOS home 'sidhant.panda' encodes as
-    'sidhant-panda'), so the user-home strip prefers an anchored match on
-    'workspaces-root-workspace-' or 'projects-' before falling back to the
-    single-token '-Users-<name>-' form.
+    Strips the leading '-Users-<name>-' user-home path (usernames may contain
+    hyphens because macOS encodes '.' as '-' in slugs, e.g. 'sidhant.panda'
+    becomes 'sidhant-panda'), drops Claude Code worktree '--'-suffix encodings,
+    and extracts the leaf project under monorepo subpaths
+    '-workspaces-(projects|external|personal)-'.
     """
-    s = _USER_HOME_ANCHORED_RE.sub("", slug, count=1)
-    if s == slug:
-        s = _USER_HOME_FALLBACK_RE.sub("", slug, count=1)
-    m = _WORKSPACES_TAIL_RE.match(s)
-    if m:
-        return m.group(1)
+    s = slug.lstrip("-")
+    if s.startswith("Users-"):
+        s = s[len("Users-"):]
+        anchor_idx = s.find(_WORKSPACE_ROOT_ANCHOR)
+        if anchor_idx != -1:
+            s = s[anchor_idx + len(_WORKSPACE_ROOT_ANCHOR):]
+        else:
+            proj_idx = s.find(_PROJECTS_ANCHOR)
+            if proj_idx != -1:
+                s = s[proj_idx + len(_PROJECTS_ANCHOR):]
+            else:
+                dash_idx = s.find("-")
+                if dash_idx != -1:
+                    s = s[dash_idx + 1:]
+
+    dd_idx = s.find("--")
+    if dd_idx != -1:
+        s = s[:dd_idx]
+
+    for seg in _LEAF_SEGMENTS:
+        idx = s.find(seg)
+        if idx != -1:
+            s = s[idx + len(seg):]
+            break
+
     return s
 
 

@@ -250,17 +250,43 @@ def test_extract_per_session_caps_to_max_sessions_keeping_most_recent(tmp_path):
 def test_normalize_slug_strips_user_home_prefix():
     assert normalize_slug("-Users-sidhant-workspaces-root-workspace-mesh") == "mesh"
     assert normalize_slug("-Users-alice-projects-foo-bar") == "foo-bar"
+    # macOS encodes "." as "-" in the user-home segment; usernames can therefore
+    # contain hyphens. Anchor on workspaces-root-workspace- / projects-, not on
+    # a single-segment username.
+    assert normalize_slug("-Users-sidhant-panda-workspaces-root-workspace-mesh") == "mesh"
 
 
-def test_normalize_slug_collapses_sage_workspaces_variants():
-    raw = [
-        "-Users-sidhant-workspaces-root-workspace-sage-workspaces",
-        "-Users-sidhant-workspaces-root-workspace-sage-workspaces-workspaces-projec",
-        "-Users-sidhant-workspaces-root-workspace-sage-workspaces-workspaces-projec-abcd1234",
-    ]
-    normalized = [normalize_slug(s) for s in raw]
-    assert len(set(normalized)) == 1
-    assert normalized[0] == "sage-workspaces"
+def test_normalize_slug_extracts_leaf_under_monorepo():
+    """sage-workspaces is a parent monorepo; leaf projects sit under -workspaces-projects-/-workspaces-external-/-workspaces-personal-."""
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces-workspaces-projects-software-farms-poc"
+    ) == "software-farms-poc"
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces-workspaces-projects-managed-agents-platform"
+    ) == "managed-agents-platform"
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces-workspaces-external-sia-claude"
+    ) == "sia-claude"
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces-workspaces-personal-sidhant-panda"
+    ) == "sidhant-panda"
+
+
+def test_normalize_slug_keeps_monorepo_root_when_no_leaf_segment():
+    """Sessions run in the monorepo root (not a leaf project) keep the monorepo name."""
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces"
+    ) == "sage-workspaces"
+
+
+def test_normalize_slug_strips_claude_worktree_suffix():
+    """Claude Code worktree slugs encode `--repos-<repo>--<branch>`; collapse to the base project."""
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces-workspaces-projects-software-farms-poc--repos-sage-workspaces--sf-2-10-artifacts"
+    ) == "software-farms-poc"
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-me-private-projects-hermes-admin--claude-worktrees-strange-archimedes-d871d7"
+    ) == "me-private-projects-hermes-admin"
 
 
 def test_group_by_project_collapses_sessions(tmp_path):
