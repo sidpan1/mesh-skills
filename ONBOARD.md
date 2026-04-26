@@ -32,26 +32,17 @@ pip install -e .
 ln -snf "$PWD/skills/mesh_trajectory" ~/.claude/skills/mesh-trajectory
 ```
 
-## Step 2: Collect the user's GitHub PAT
+## Step 2: Verify GitHub access
 
-Tell the user:
-
-> "I need a GitHub Personal Access Token with `repo` scope on the `mesh-data`
->  repository. Visit https://github.com/settings/tokens, create a fine-grained
->  token scoped to `mesh-data` only, and paste it here."
-
-Persist the token so it's available in every future Claude Code session:
+The skill uses the user's existing local git auth (gh CLI, credential helper, SSH). No new tokens to generate. Run:
 
 ```bash
-mkdir -p ~/.config/mesh
-echo 'export MESH_GH_TOKEN=<token>' > ~/.config/mesh/env
-chmod 600 ~/.config/mesh/env
-# Source on every shell startup:
-echo 'source ~/.config/mesh/env' >> ~/.zshrc   # or ~/.bashrc on Linux
-source ~/.config/mesh/env
+git ls-remote --exit-code https://github.com/sidpan1/mesh-data HEAD
 ```
 
-Verify with `echo $MESH_GH_TOKEN` (should print the token).
+If it succeeds (prints a SHA), the user is good. Continue to Step 3.
+
+If it fails with auth error: tell the user "Your GitHub auth doesn't have access to mesh-data yet. Ping the founder with your GitHub handle and they will grant you access. Re-run this step after they confirm." Then stop.
 
 ## Step 3: Run /mesh-onboard
 

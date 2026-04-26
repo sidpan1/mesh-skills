@@ -39,14 +39,13 @@ Founder-side skill, run on the founder's laptop on Friday morning to compose tab
     ```bash
     cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -c "from skills.mesh_orchestrator.scripts.write_invites import write_invites; import json, pathlib; write_invites(pathlib.Path('~/.cache/mesh-data').expanduser(), json.load(open('/tmp/mesh_response.json')), time='19:00')"
     ```
-11. Commit + push (inject `MESH_GH_TOKEN` so the push is non-interactive):
+11. Commit + push (uses founder's local git auth — no token injection):
     ```bash
-    git -C ~/.cache/mesh-data remote set-url origin "https://oauth2:${MESH_GH_TOKEN}@github.com/sidpan1/mesh-data"
     git -C ~/.cache/mesh-data add networking-dinners
     git -C ~/.cache/mesh-data commit -m "dinner: <dinner_date> tables composed"
     git -C ~/.cache/mesh-data push
     ```
-    `MESH_GH_TOKEN` must be exported on the founder's shell. Same env var as the user side.
+    The founder owns mesh-data so push works with whatever GitHub auth their local git is configured with (gh CLI, credential helper, SSH).
 12. Delete the temp files: `rm -f /tmp/mesh_users.json /tmp/mesh_response.json`.
 13. Print: "Invites pushed. Now WhatsApp the cohort: 'invites live, run /mesh-check'."
 
@@ -60,5 +59,5 @@ Founder-side skill, run on the founder's laptop on Friday morning to compose tab
 
 - Never log full user bodies in the terminal beyond what the founder needs to spot-check.
 - The mesh-data clone is already private; do not copy it elsewhere.
-- `MESH_GH_TOKEN` is read from env only.
+- The skill does NOT manage GitHub credentials. It assumes the founder's local git is already authorized to push to mesh-data.
 - Temp files at `/tmp/mesh_users.json` and `/tmp/mesh_response.json` MUST be deleted at the end of the flow (step 12), even on partial failure.

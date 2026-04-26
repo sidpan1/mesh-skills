@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 import pytest
 from skills.mesh_trajectory.scripts.push import (
-    write_user_file, slugify_email, PushAborted, _authed_url, _scrub_token,
+    write_user_file, slugify_email, check_repo_access, PushAborted,
 )
 from skills.mesh_trajectory.scripts.validate import ValidationError
 
@@ -43,27 +43,33 @@ def test_write_user_file_refuses_non_schema_field(tmp_path):
         write_user_file(tmp_path, fm, "body " * 60)
 
 
-def test_authed_url_passthrough_when_no_token(monkeypatch):
-    monkeypatch.delenv("MESH_GH_TOKEN", raising=False)
-    assert _authed_url("https://github.com/x/y") == "https://github.com/x/y"
+def _bare_repo_with_one_commit(path: Path) -> str:
+    """Create a bare repo with a single seed commit on main. Returns file:// URL."""
+    bare = path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True)
+    work = path / "seed"
+    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "t@t"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "t"], check=True, capture_output=True)
+    (work / "README.md").write_text("seed")
+    subprocess.run(["git", "-C", str(work), "add", "README.md"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "commit", "-m", "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "push", str(bare), "main"], check=True, capture_output=True)
+    return f"file://{bare}"
 
 
-def test_authed_url_injects_token_for_github(monkeypatch):
-    monkeypatch.setenv("MESH_GH_TOKEN", "gho_secrettoken")
-    assert _authed_url("https://github.com/x/y") == "https://oauth2:gho_secrettoken@github.com/x/y"
+def test_check_repo_access_passes_for_reachable_repo(tmp_path):
+    url = _bare_repo_with_one_commit(tmp_path)
+    check_repo_access(url)  # should not raise
 
 
-def test_authed_url_does_not_leak_token_to_other_hosts(monkeypatch):
-    monkeypatch.setenv("MESH_GH_TOKEN", "gho_secrettoken")
-    assert _authed_url("https://gitlab.com/x/y") == "https://gitlab.com/x/y"
+def test_check_repo_access_aborts_for_missing_repo(tmp_path):
+    bogus = f"file://{tmp_path}/does-not-exist.git"
+    with pytest.raises(PushAborted, match="cannot access"):
+        check_repo_access(bogus)
 
 
-def test_scrub_token_redacts_token_in_text(monkeypatch):
-    monkeypatch.setenv("MESH_GH_TOKEN", "gho_secrettoken")
-    assert _scrub_token("error at https://oauth2:gho_secrettoken@github.com/x/y") == \
-        "error at https://oauth2:***@github.com/x/y"
-
-
-def test_scrub_token_noop_when_no_token(monkeypatch):
-    monkeypatch.delenv("MESH_GH_TOKEN", raising=False)
-    assert _scrub_token("some error text") == "some error text"
+def test_check_repo_access_message_mentions_founder(tmp_path):
+    bogus = f"file://{tmp_path}/nope.git"
+    with pytest.raises(PushAborted, match="founder"):
+        check_repo_access(bogus)
