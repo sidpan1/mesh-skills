@@ -37,10 +37,15 @@ def write_user_file(users_dir: Path, frontmatter: dict, body: str) -> Path:
     return out
 
 
+def _scrub_token(text: str) -> str:
+    token = os.environ.get("MESH_GH_TOKEN")
+    return text.replace(token, "***") if token else text
+
+
 def _run(cmd: list[str], cwd: Path) -> str:
     res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if res.returncode != 0:
-        raise PushAborted(f"{shlex.join(cmd)} failed: {res.stderr.strip()}")
+        raise PushAborted(f"{shlex.join(cmd)} failed: {_scrub_token(res.stderr.strip())}")
     return res.stdout.strip()
 
 
