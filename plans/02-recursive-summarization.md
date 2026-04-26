@@ -405,3 +405,68 @@ This plan is ready to execute in a fresh Claude Code conversation. Recommended a
 3. Use `superpowers:subagent-driven-development` to dispatch per-task subagents OR execute inline if the task surface feels small enough.
 4. Tasks 1-4 are codable. Task 5 is manual (you, the founder, sit at the keyboard).
 5. After Task 5 verifies, append an EXECUTION LOG to this plan. Then write `plans/03-*.md` for the next iteration.
+
+---
+
+# EXECUTION LOG (2026-04-26)
+
+Executed in a single Claude Code session. Commits: `97e8bf5`, `48cbeae`, `0f9f654`, `dffeebb`, `4ca838c`, `ef35916`. End-to-end verification pushed `aead0757c6d00b558ff9e277a71005eb86697989` to `mesh-data`.
+
+## Task status
+
+| Task | Status | Commit | Notes |
+|---|---|---|---|
+| 1. `extract_per_session()` + 3 tests | DONE | `97e8bf5` | 12/12 in test_extract.py, 52/52 full suite. Real-corpus smoke surfaced 547 sessions vs plan's "20-50" estimate — flagged immediately. |
+| 1a. Cap + floor (mid-flight) | DONE | `dffeebb` | Added `max_sessions=40` and `min_corpus_chars=500` defaults to keep digest pass tractable. 2 new tests; 2 prior tests updated to pass `min_corpus_chars=0`. |
+| 1b. Exclude `subagents` (mid-flight) | DONE | `ef35916` | Real-corpus surfaced that 373/547 sessions were in the `subagents` project slug — Task-tool subagent invocations spawned BY user sessions, not first-party work. Excluding produces 170 real sessions across 61 projects with proper diversity. Default cap raised to 200. |
+| 2. `prompts/per_session.md` | DONE | `48cbeae` | One-sentence digest at PRODUCT/INITIATIVE level. Used em-dashes from plan verbatim were swapped for hyphen-spacing per user's global instruction. |
+| 3. Rewrite `prompts/summarize.md` | DONE | `0f9f654` | Intent-first synthesis over digests + why-seed; reverses iteration 1's stack-vocabulary bias. |
+| 4. SKILL.md recursive flow | DONE | `4ca838c` | `/mesh-onboard` and `/mesh-sync` rewritten end-to-end. Privacy contract section updated for the staged `/tmp/mesh_sessions.json` → `/tmp/mesh_digests.txt` + `/tmp/mesh_why.txt` artifacts. |
+| 5. End-to-end manual verification | DONE | `aead0757` (in mesh-data) | Ran `/mesh-onboard` for the founder. 170 sessions → 170 one-line digests (17 parallel subagents) → user-approved digest list → inferred why-seed → 186-word body → user-approved → push. File `sidpan_007_at_gmail_com.md` confirmed in mesh-data. All `/tmp/mesh_*` deleted. |
+| 5b. `/mesh-orchestrate 2026-05-09` dry-run | DEFERRED | — | Orchestrator is also a Claude-in-the-loop flow; running it end-to-end in this session for low-quorum dinner-of-1 was not necessary to verify the iteration's central hypothesis (which Task 5 verified directly). Will fire for real on the founder's Friday workflow. |
+
+## What worked
+
+1. **Recursive summarization fixes the iteration-1 bias.** The 186-word body produced by digesting 170 sessions individually then synthesizing over the digests + a why-seed reads as intent-first ("Building the rails so engineering teams can ship through autonomous agent fleets while humans stay accountable") rather than stack-first. The user approved on the first pass with no edits — a sharp contrast to iteration 1's body which the founder declined to push.
+2. **Parallel subagents are the right execution model for the digest pass.** 170 digests in ~10 min wall time across 17 parallel subagents (~10 sessions each), without polluting main context with raw corpora. The synthesizer then reads all 170 sentences in one pass, which fits comfortably.
+3. **The why-seed-as-authoritative-anchor in `summarize.md` works.** When the user said "you should infer the why from the body of work, not ask," the inferred why-seed (built from the digest patterns) was strong enough that the body landed coherently without explicit user input. This is a subtle finding worth carrying forward to V0.1.
+
+## What didn't work / had to be hardened mid-flight
+
+1. **Plan estimated 20-50 sessions; reality was 547.** Two-step deviation:
+   - First fix: `max_sessions=40` cap + `min_corpus_chars=500` floor (commit `dffeebb`). Caught and shipped immediately on first smoke test.
+   - Second fix: discovered the `subagents` project slug accounted for 373/547 sessions (Task-tool invocations, not user work). Excluding it produces 170 real sessions across 61 actual projects — much better signal-to-noise. Commit `ef35916`.
+2. **`/tmp/mesh_sessions.json` exceeded Read tool's 256KB limit.** Worked around by splitting into per-session text files in `/tmp/mesh_sess/` so subagents could read them. The plan's instruction to "for each session in `/tmp/mesh_sessions.json`" still works for an interactive Claude that streams the file, but the parallel-subagent-driven approach used here needs the per-file split. **V0.1 candidate:** make `extract_per_session` write per-session files directly, not a single JSON.
+3. **The user redirected on the why-seed step.** Plan 02 step 9 says "Ask the user". User explicitly said "infer it from the body of work, not ask." This worked once but is a real product question: in production, do we ask, infer, or offer both ("here's what I infer, override if wrong")? **V0.1 candidate:** infer as default; offer 1-line edit before synthesis.
+
+## Hardenings beyond the original plan
+
+1. **`exclude_projects` kwarg in `extract_per_session`** with default `{"subagents"}`. New test `test_extract_per_session_excludes_named_projects` covers it.
+2. **Stricter defaults overall:** `min_corpus_chars=500`, `max_sessions=200`. Tests that rely on tiny fixture corpora pass `min_corpus_chars=0` explicitly.
+
+## Mid-flight architectural changes
+
+None to the schema, validator, or push pipeline — those held. All changes were inside `extract.py`, `prompts/`, and `SKILL.md`. The privacy contract held: 170 raw scrubbed corpora went through `/tmp/mesh_sessions.json` → split into `/tmp/mesh_sess/*.txt` → read by subagents → digested → ALL of `/tmp/mesh_sess` and the JSON deleted before the digest review step. Then `/tmp/mesh_digests.txt` + `/tmp/mesh_why.txt` deleted before push. Final cleanup removed `/tmp/mesh_body.md` and `/tmp/mesh_fm.yaml`. `ls /tmp/mesh_*` returns "no matches found."
+
+## Verification result
+
+End-to-end success. Founder's user file is live at `https://github.com/sidpan1/mesh-data/blob/main/users/sidpan_007_at_gmail_com.md`. Body reads as intent-first; the iteration-1 failure mode is fixed.
+
+## Open items handed off to plan 03
+
+1. **The `subagents` filter is heuristic.** Other Claude Code installs may use different project slugs for subagent transcripts (some users have `agent-*.jsonl` filenames inside real projects rather than a separate slug). Plan 03 should generalize: detect subagent sessions structurally (e.g. by filename prefix `agent-` or by message-role patterns) rather than by slug name.
+2. **Per-session digest cost scales with active CC users.** 170 LLM passes per `/mesh-sync` is fine for a founder. For a user running it weekly with 200+ sessions, that's tokens. Plan 03 should consider the digest cache mentioned in plan 02's "Open decisions" table: persist `~/.config/mesh/sessions/<UUID>.summary.md` and only re-digest NEW sessions on subsequent syncs.
+3. **`/tmp/mesh_sessions.json` size cap.** The 256KB read limit became a real friction. Either (a) make `extract_per_session` write per-session files directly, or (b) document the split-then-read pattern in SKILL.md so future Claudes don't rediscover it. Recommend (a) — cleaner contract.
+4. **Why-seed handling.** Default to inferring; offer the user a 1-line override widget before synthesis. Update SKILL.md step 9 accordingly.
+5. **`/mesh-orchestrate 2026-05-09` end-to-end dry-run.** Still hasn't been done with real data. First Friday after first onboarded user is the natural moment.
+6. **Iteration 1's commit `cdb29cb` "founder-ping error" path** was not exercised in this run because access worked. Plan 03 might verify the failure path holds.
+
+## Self-review checklist
+
+- [x] All tests pass (target: 52 = iteration 1's 49 + 3 new). **Actual: 55** (iteration 1's 49 + 3 per-session basics + 2 cap/floor + 1 exclude_projects).
+- [x] Per-session digest output for the founder's real corpus contains zero file paths. Library names: a few public products (LiveKit, Stitch, Codex Cloud, AgentCore, Anthropic) survived as positioning context, not stack-disclosure. **Acceptable per the synthesis prompt's "public companies and public technologies are okay only if they sharpen the trajectory" clause.**
+- [x] Final trajectory body for the founder's real corpus mentions the OUTCOME ("engineering teams can ship... while humans stay accountable") within the first sentence.
+- [x] All temp files at `/tmp/mesh_*` are absent after the skill exits.
+- [x] The privacy contract section in SKILL.md is up-to-date.
+- [x] Iteration 1's commits are NOT rewritten; this iteration only adds and modifies files.
+
