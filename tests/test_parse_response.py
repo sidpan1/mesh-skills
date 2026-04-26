@@ -55,3 +55,44 @@ def test_missing_required_key_raises():
 def test_invalid_json_raises():
     with pytest.raises(ParseError, match="JSON"):
         parse_response("not json")
+
+
+def test_low_quorum_allows_under_six_attendees():
+    low = json.loads(json.dumps(VALID))
+    low["low_quorum"] = True
+    low["tables"][0]["attendees"] = low["tables"][0]["attendees"][:3]
+    out = parse_response(json.dumps(low))
+    assert len(out["tables"][0]["attendees"]) == 3
+
+
+def test_low_quorum_still_refuses_solo_table():
+    low = json.loads(json.dumps(VALID))
+    low["low_quorum"] = True
+    low["tables"][0]["attendees"] = low["tables"][0]["attendees"][:1]
+    with pytest.raises(ParseError, match="low-quorum"):
+        parse_response(json.dumps(low))
+
+
+def test_tables_non_list_raises():
+    bad = json.loads(json.dumps(VALID))
+    bad["tables"] = {"not": "a list"}
+    with pytest.raises(ParseError, match="tables must be a list"):
+        parse_response(json.dumps(bad))
+
+
+def test_attendees_non_list_raises():
+    bad = json.loads(json.dumps(VALID))
+    bad["tables"][0]["attendees"] = None
+    with pytest.raises(ParseError, match="attendees must be a list"):
+        parse_response(json.dumps(bad))
+
+
+def test_strips_unfenced_markdown_block():
+    wrapped = "```\n" + json.dumps(VALID) + "\n```"
+    out = parse_response(wrapped)
+    assert len(out["tables"]) == 1
+
+
+def test_top_level_must_be_object():
+    with pytest.raises(ParseError, match="object"):
+        parse_response("[1, 2, 3]")
