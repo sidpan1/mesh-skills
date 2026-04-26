@@ -205,6 +205,23 @@ def test_extract_per_session_drops_sessions_below_min_corpus_chars(tmp_path):
     assert sessions[0].session_id == "real"
 
 
+def test_extract_per_session_excludes_named_projects(tmp_path):
+    (tmp_path / "subagents").mkdir()
+    (tmp_path / "real-proj").mkdir()
+    _make_jsonl(tmp_path / "subagents" / "noise.jsonl", [
+        _msg("user", "x" * 600, "2026-04-22T10:00:00Z"),
+    ])
+    _make_jsonl(tmp_path / "real-proj" / "real.jsonl", [
+        _msg("user", "x" * 600, "2026-04-22T10:00:00Z"),
+    ])
+    sessions = extract_per_session(
+        projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z",
+        exclude_projects={"subagents"},
+    )
+    assert len(sessions) == 1
+    assert sessions[0].project_slug == "real-proj"
+
+
 def test_extract_per_session_caps_to_max_sessions_keeping_most_recent(tmp_path):
     proj = tmp_path / "proj"
     for i in range(5):

@@ -109,20 +109,28 @@ class Session:
     corpus: str
 
 
+DEFAULT_EXCLUDE_PROJECTS = frozenset({"subagents"})
+
+
 def extract_per_session(
     projects_root: Path = DEFAULT_PROJECTS_ROOT,
     weeks: int = DEFAULT_WEEKS,
     now: str | None = None,
     max_chars_per_session: int = 8_000,
     min_corpus_chars: int = 500,
-    max_sessions: int = 40,
+    max_sessions: int = 200,
+    exclude_projects: frozenset[str] | set[str] | None = None,
 ) -> list[Session]:
     cutoff = (
         _parse_ts(now) if now else datetime.now(timezone.utc)
     ) - timedelta(weeks=weeks)
+    if exclude_projects is None:
+        exclude_projects = DEFAULT_EXCLUDE_PROJECTS
 
     sessions: list[Session] = []
     for jsonl in sorted(projects_root.rglob("*.jsonl")):
+        if jsonl.parent.name in exclude_projects:
+            continue
         chunks: list[str] = []
         last_seen: datetime | None = None
         for line in jsonl.read_text().splitlines():
