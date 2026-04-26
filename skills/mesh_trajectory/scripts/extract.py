@@ -14,13 +14,36 @@ DEFAULT_PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 DEFAULT_WEEKS = 4
 DEFAULT_MAX_CHARS = 60_000
 
+# URLs are stashed before path-scrub so https://host/path/segments isn't
+# mangled into https:/[path]. After path-scrub they're restored verbatim.
+_URL_RE = re.compile(r"\bhttps?://\S+")
 _PATH_RE = re.compile(r"(/[A-Za-z0-9_\-./~]+){2,}")
-_KEY_RE = re.compile(r"\b(sk-[A-Za-z0-9_\-]{12,}|[A-Z][A-Z0-9_]+_API_KEY=\S+)\b")
+
+# Covers: OpenAI/Anthropic sk- keys, GitHub PAT/OAuth/server/refresh/user
+# tokens (gh[pousr]_), AWS access key IDs (AKIA + 16 alnum), and ENV-style
+# assignments where the variable name ends in _API_KEY, _TOKEN, or _SECRET.
+_KEY_RE = re.compile(
+    r"("
+    r"sk-[A-Za-z0-9_\-]{12,}"
+    r"|gh[pousr]_[A-Za-z0-9]{20,}"
+    r"|AKIA[A-Z0-9]{16}"
+    r"|[A-Z][A-Z0-9_]+_(?:API_KEY|TOKEN|SECRET)=\S+"
+    r")"
+)
 
 
 def scrub_message(text: str) -> str:
     text = _KEY_RE.sub("[redacted-key]", text)
+    urls: list[str] = []
+
+    def _stash(m: re.Match) -> str:
+        urls.append(m.group(0))
+        return f"\x00URL{len(urls) - 1}\x00"
+
+    text = _URL_RE.sub(_stash, text)
     text = _PATH_RE.sub("[path]", text)
+    for i, u in enumerate(urls):
+        text = text.replace(f"\x00URL{i}\x00", u)
     return text
 
 

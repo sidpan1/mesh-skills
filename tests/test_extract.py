@@ -50,6 +50,27 @@ def test_scrub_strips_likely_api_keys():
     assert "[redacted-key]" in out
 
 
+def test_scrub_strips_github_pats_and_aws_keys():
+    msg = (
+        "token ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA and "
+        "AWS AKIAIOSFODNN7EXAMPLE and "
+        "GITHUB_TOKEN=ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB and "
+        "MY_SECRET=hunter2hunter2"
+    )
+    out = scrub_message(msg)
+    assert "ghp_AAAA" not in out
+    assert "AKIAIOSFODNN7EXAMPLE" not in out
+    assert "ghp_BBBB" not in out
+    assert "hunter2" not in out
+
+
+def test_scrub_does_not_mangle_https_urls():
+    msg = "see https://api.github.com/repos/foo/bar/issues/1 for context"
+    out = scrub_message(msg)
+    assert "https://api.github.com/repos/foo/bar/issues/1" in out
+    assert "[path]" not in out
+
+
 def test_corpus_is_capped_to_max_chars(tmp_path):
     proj = tmp_path / "proj-c" / "conversation.jsonl"
     _make_jsonl(proj, [
