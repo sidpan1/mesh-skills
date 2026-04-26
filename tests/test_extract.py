@@ -158,7 +158,7 @@ def test_extract_per_session_returns_one_corpus_per_session(tmp_path):
     _make_jsonl(proj / "uuid-bbb.jsonl", [
         _msg("user", "session B msg 1", "2026-04-23T10:00:00Z"),
     ])
-    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z", min_corpus_chars=0)
     assert len(sessions) == 2
     assert sessions[0].session_id == "uuid-bbb"
     assert sessions[1].session_id == "uuid-aaa"
@@ -174,7 +174,7 @@ def test_extract_per_session_skips_sessions_outside_window(tmp_path):
     _make_jsonl(proj / "new.jsonl", [
         _msg("user", "NEW", "2026-04-22T00:00:00Z"),
     ])
-    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
+    sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z", min_corpus_chars=0)
     assert len(sessions) == 1
     assert sessions[0].session_id == "new"
 
@@ -187,3 +187,33 @@ def test_extract_per_session_drops_empty_sessions(tmp_path):
     ])
     sessions = extract_per_session(projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z")
     assert sessions == []
+
+
+def test_extract_per_session_drops_sessions_below_min_corpus_chars(tmp_path):
+    proj = tmp_path / "proj"
+    _make_jsonl(proj / "tiny.jsonl", [
+        _msg("user", "hi", "2026-04-22T10:00:00Z"),
+    ])
+    _make_jsonl(proj / "real.jsonl", [
+        _msg("user", "x" * 600, "2026-04-22T10:00:00Z"),
+    ])
+    sessions = extract_per_session(
+        projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z",
+        min_corpus_chars=500,
+    )
+    assert len(sessions) == 1
+    assert sessions[0].session_id == "real"
+
+
+def test_extract_per_session_caps_to_max_sessions_keeping_most_recent(tmp_path):
+    proj = tmp_path / "proj"
+    for i in range(5):
+        _make_jsonl(proj / f"s{i}.jsonl", [
+            _msg("user", "x" * 600, f"2026-04-{20 + i:02d}T10:00:00Z"),
+        ])
+    sessions = extract_per_session(
+        projects_root=tmp_path, weeks=4, now="2026-04-25T00:00:00Z",
+        max_sessions=3,
+    )
+    assert len(sessions) == 3
+    assert [s.session_id for s in sessions] == ["s4", "s3", "s2"]

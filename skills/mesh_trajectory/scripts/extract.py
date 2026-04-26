@@ -114,6 +114,8 @@ def extract_per_session(
     weeks: int = DEFAULT_WEEKS,
     now: str | None = None,
     max_chars_per_session: int = 8_000,
+    min_corpus_chars: int = 500,
+    max_sessions: int = 40,
 ) -> list[Session]:
     cutoff = (
         _parse_ts(now) if now else datetime.now(timezone.utc)
@@ -152,6 +154,8 @@ def extract_per_session(
             continue
 
         corpus = "\n\n".join(chunks)[:max_chars_per_session]
+        if len(corpus) < min_corpus_chars:
+            continue
         sessions.append(Session(
             session_id=jsonl.stem,
             project_slug=jsonl.parent.name,
@@ -160,7 +164,7 @@ def extract_per_session(
         ))
 
     sessions.sort(key=lambda s: s.last_seen, reverse=True)
-    return sessions
+    return sessions[:max_sessions]
 
 
 def _extract_text(inner) -> str:
