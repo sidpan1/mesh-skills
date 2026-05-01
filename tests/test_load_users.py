@@ -2,6 +2,9 @@ from pathlib import Path
 from skills.mesh_orchestrator.scripts.load_users import (
     load_users_for_date, User,
 )
+from skills.mesh_trajectory.schema import SECTION_FIELDS
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _write_user(dir: Path, email: str, sats: list[str], body: str = "body " * 60):
@@ -55,3 +58,44 @@ def test_skips_users_in_wrong_city(tmp_path, monkeypatch):
     )
     users = load_users_for_date(tmp_path, "2026-05-09")
     assert users == []
+
+
+# --- v2 sections + v1 adapter ---
+
+def test_v2_user_exposes_parsed_sections(tmp_path):
+    (tmp_path / "users").mkdir()
+    (tmp_path / "users" / "asha_at_example_com.md").write_text(
+        (FIXTURES / "user_v2_valid.md").read_text()
+    )
+    users = load_users_for_date(tmp_path, "2026-05-09")
+    assert len(users) == 1
+    u = users[0]
+    assert set(u.sections.keys()) == set(SECTION_FIELDS)
+    assert "founding engineer" in u.sections["Work context"].lower()
+    assert "agent harness" in u.sections["Top of mind"].lower()
+
+
+def test_v1_user_has_only_recent_months_populated(tmp_path):
+    (tmp_path / "users").mkdir()
+    (tmp_path / "users" / "legacy_at_example_com.md").write_text(
+        (FIXTURES / "user_v1_legacy.md").read_text()
+    )
+    users = load_users_for_date(tmp_path, "2026-05-09")
+    assert len(users) == 1
+    u = users[0]
+    assert set(u.sections.keys()) == set(SECTION_FIELDS)
+    assert u.sections["Work context"] == ""
+    assert u.sections["Top of mind"] == ""
+    assert u.sections["Long-term background"] == ""
+    assert "schema_version 1" in u.sections["Recent months"].lower()
+    # Legacy body field still populated for any caller that looks at it.
+    assert u.body == u.sections["Recent months"]
+
+
+def test_user_sections_is_ordered(tmp_path):
+    (tmp_path / "users").mkdir()
+    (tmp_path / "users" / "asha_at_example_com.md").write_text(
+        (FIXTURES / "user_v2_valid.md").read_text()
+    )
+    users = load_users_for_date(tmp_path, "2026-05-09")
+    assert list(users[0].sections.keys()) == list(SECTION_FIELDS)
