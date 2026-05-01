@@ -3,6 +3,7 @@
 Usage as CLI:
     python -m skills.mesh_trajectory.scripts.validate path/to/user.md
 """
+import os
 import re
 import sys
 import unicodedata
@@ -26,6 +27,40 @@ class ValidationError(Exception):
 
 
 _H2_RE = re.compile(r"^##\s+(.+?)\s*$")
+
+# V8 regex set. Conservative; failures name the offending substring so the
+# user can rephrase. False-positives are acceptable, false-negatives are not.
+# Phone: any run of 7+ digits possibly preceded by + and interleaved with
+# single-character separators (space, hyphen, dot). Catches +91 98765 43210,
+# 98765-43210, 415.555.0123, 9876543210, +1 (415) 555-0123 (after stripping
+# parens).
+_PHONE_RE = re.compile(r"(?:\+?\d(?:[\s\-.]?\d){6,14})")
+_EMAIL_RE = re.compile(r"[\w\.\-+]+@[\w\.\-]+\.[A-Za-z]{2,}")
+_ADDRESS_RE = re.compile(
+    r"(?:#\s*\d+[A-Z]?[-/]?\d*[A-Z]?"
+    r"|\b\d+[A-Z]?[-/]\d+[A-Z]?\b"
+    r"|\b(?:HSR Layout|Indiranagar|Koramangala|Whitefield|Marathahalli|Jayanagar|Bellandur)\b)",
+    re.IGNORECASE,
+)
+
+
+def _load_stoplist() -> list[str]:
+    """Committed stop-list plus optional per-user override.
+
+    Override path: env $MESH_PII_EXTRA_PATH, else ~/.mesh/pii_extra.txt.
+    """
+    base = Path(__file__).parent.parent / "pii_stoplist.txt"
+    override = Path(os.environ.get("MESH_PII_EXTRA_PATH") or Path.home() / ".mesh" / "pii_extra.txt")
+    terms: list[str] = []
+    for path in (base, override):
+        if not path.exists():
+            continue
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            terms.append(line)
+    return terms
 
 
 def parse_sections(body: str) -> dict[str, str]:
@@ -135,6 +170,24 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
             raise ValidationError(
                 f"total body has {total} words; cap is {TOTAL_BODY_WORD_CAP}"
             )
+
+        # V8: PII stop-list pass.
+        own_email = frontmatter["email"].lower()
+        body_lower = body.lower()
+
+        m = _PHONE_RE.search(body)
+        if m:
+            raise ValidationError(f"PII (phone) in body: '{m.group(0)}'")
+        for em in _EMAIL_RE.findall(body):
+            if em.lower() != own_email:
+                raise ValidationError(f"PII (email) in body: '{em}'")
+        m = _ADDRESS_RE.search(body)
+        if m:
+            raise ValidationError(f"PII (address) in body: '{m.group(0)}'")
+        for term in _load_stoplist():
+            pattern = r"\b" + re.escape(term.lower()) + r"\b"
+            if re.search(pattern, body_lower):
+                raise ValidationError(f"PII (stoplist) in body: '{term}'")
 
     else:
         # v1 only: legacy single-body word check (50-300).

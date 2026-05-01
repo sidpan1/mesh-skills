@@ -1,0 +1,27 @@
+# MESH PII stop-list (V0).
+# One term per line. Lines starting with # are comments.
+# Matched as case-insensitive whole-word substring against the body.
+# Per-user override: add a line to ~/.mesh/pii_extra.txt (same format).
+# Conservative seed; expand as we learn from dogfood.
+
+# Common partner / household relationship terms (intentionally generic).
+my wife
+my husband
+my partner
+my fiance
+my fiancee
+my girlfriend
+my boyfriend
+my mom
+my dad
+my mother
+my father
+my son
+my daughter
+my child
+my kids
+my children
+home address
+home phone
+landlord
+landlady

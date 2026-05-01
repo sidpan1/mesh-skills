@@ -252,3 +252,46 @@ def test_v2_body_below_50_words_is_NOT_refused_by_legacy_check():
         validate_payload(VALID_V2, body, today=date(2026, 5, 1))
     except ValidationError as e:
         assert "body must be" not in str(e), f"v2 should not hit legacy word check: {e}"
+
+
+# --- V8: PII stop-list pass ---
+
+def test_phone_number_in_body_is_refused():
+    body = _v2_body(**{"Top of mind": "call me on +91 98765 43210 to chat"})
+    with pytest.raises(ValidationError, match=r"PII.*phone.*98765"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_email_other_than_self_in_body_is_refused():
+    body = _v2_body(**{"Top of mind": "ping ravi@otherco.com about the eval harness"})
+    with pytest.raises(ValidationError, match=r"PII.*email.*ravi@otherco.com"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_users_own_email_in_body_is_allowed():
+    body = _v2_body(**{"Top of mind": "you can also reach me at asha@example.com"})
+    try:
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+    except ValidationError as e:
+        assert "PII" not in str(e), f"own email should be allowed: {e}"
+
+
+def test_address_pattern_in_body_is_refused():
+    body = _v2_body(**{"Work context": "office at HSR Layout in town"})
+    with pytest.raises(ValidationError, match=r"PII.*address"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_stoplist_term_in_body_is_refused():
+    body = _v2_body(**{"Top of mind": "balancing this with my wife starting a new role"})
+    with pytest.raises(ValidationError, match=r"PII.*stoplist.*my wife"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_per_user_override_extends_stoplist(tmp_path, monkeypatch):
+    override = tmp_path / "pii_extra.txt"
+    override.write_text("# my override\nproject helios\n")
+    monkeypatch.setenv("MESH_PII_EXTRA_PATH", str(override))
+    body = _v2_body(**{"Top of mind": "main thrust this month is project helios"})
+    with pytest.raises(ValidationError, match=r"PII.*stoplist.*project helios"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
