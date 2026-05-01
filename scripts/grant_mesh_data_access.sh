@@ -82,9 +82,12 @@ gh repo view "$REPO" --json visibility -q .visibility >/dev/null 2>&1 || {
 }
 
 # Pending mode: pull handles from open access-request issues on the public repo.
+# We list all open issues then filter by title prefix in jq (avoids GitHub's
+# indexed --search, which has latency for newly-created issues).
 if [[ "$PENDING_MODE" -eq 1 ]]; then
   echo "Reading open access-request issues from $ISSUE_REPO..."
-  issues_json=$(gh issue list -R "$ISSUE_REPO" --state open --search "Access request: in:title" --json number,author,title --limit 100)
+  issues_json=$(gh issue list -R "$ISSUE_REPO" --state open --json number,author,title --limit 200 \
+    | jq '[.[] | select(.title | startswith("Access request:"))]')
   count=$(echo "$issues_json" | jq length)
   if [[ "$count" -eq 0 ]]; then
     echo "No pending access-request issues."
