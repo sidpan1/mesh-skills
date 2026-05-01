@@ -129,12 +129,20 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
                     f"section '{name}' has {wc} words; cap is {cap}"
                 )
 
-    # Legacy body word check (replaced by V7 in the next task)
-    word_count = len(body.split())
-    if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
-        raise ValidationError(
-            f"body must be {BODY_MIN_WORDS}-{BODY_MAX_WORDS} words, got {word_count}"
-        )
+        # V7: total body <= TOTAL_BODY_WORD_CAP
+        total = sum(len(sections[name].split()) for name in SECTION_FIELDS)
+        if total > TOTAL_BODY_WORD_CAP:
+            raise ValidationError(
+                f"total body has {total} words; cap is {TOTAL_BODY_WORD_CAP}"
+            )
+
+    else:
+        # v1 only: legacy single-body word check (50-300).
+        word_count = len(body.split())
+        if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
+            raise ValidationError(
+                f"body must be {BODY_MIN_WORDS}-{BODY_MAX_WORDS} words, got {word_count}"
+            )
 
 
 def parse_markdown(path: Path) -> tuple[dict, str]:

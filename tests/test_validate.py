@@ -205,3 +205,50 @@ def test_section_at_exact_cap_passes():
         validate_payload(VALID_V2, body, today=date(2026, 5, 1))
     except ValidationError as e:
         assert "Work context" not in str(e), f"V6 should pass at exact cap: {e}"
+
+
+# --- V7: total body cap + retire legacy single-body check for v2 ---
+
+def test_total_body_over_cap_is_refused_even_when_each_section_under_its_cap():
+    sections = {
+        "Work context":          " ".join(["w"] * 50),   # 50
+        "Top of mind":           " ".join(["w"] * 70),   # 70
+        "Recent months":         " ".join(["w"] * 80),   # 80
+        "Long-term background":  " ".join(["w"] * 51),   # 51 -> total 251
+    }
+    body = _v2_body(**sections)
+    with pytest.raises(ValidationError, match=r"total body.*251.*250"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_total_body_at_exact_cap_passes():
+    sections = {
+        "Work context":          " ".join(["w"] * 50),
+        "Top of mind":           " ".join(["w"] * 75),
+        "Recent months":         " ".join(["w"] * 75),
+        "Long-term background":  " ".join(["w"] * 50),
+    }  # total 250
+    body = _v2_body(**sections)
+    try:
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+    except ValidationError as e:
+        assert "total body" not in str(e), f"V7 should pass at exact cap: {e}"
+
+
+def test_v1_body_word_check_still_runs_during_migration_window():
+    with pytest.raises(ValidationError, match="body must be"):
+        validate_payload(VALID_V1, body="too short", today=date(2026, 5, 1))
+
+
+def test_v2_body_below_50_words_is_NOT_refused_by_legacy_check():
+    sections = {
+        "Work context":          "one",
+        "Top of mind":           "two",
+        "Recent months":         "three",
+        "Long-term background":  "four",
+    }
+    body = _v2_body(**sections)
+    try:
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+    except ValidationError as e:
+        assert "body must be" not in str(e), f"v2 should not hit legacy word check: {e}"
