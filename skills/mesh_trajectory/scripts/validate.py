@@ -120,7 +120,16 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
                 f"sections must appear in this order: {expected}; got: {actual}"
             )
 
-    # Legacy body word check (replaced by V6+V7 in subsequent tasks)
+        # V6: each section <= SECTION_WORD_CAPS[section]
+        for name in SECTION_FIELDS:
+            wc = len(sections[name].split())
+            cap = SECTION_WORD_CAPS[name]
+            if wc > cap:
+                raise ValidationError(
+                    f"section '{name}' has {wc} words; cap is {cap}"
+                )
+
+    # Legacy body word check (replaced by V7 in the next task)
     word_count = len(body.split())
     if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
         raise ValidationError(

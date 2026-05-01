@@ -180,3 +180,28 @@ def test_extra_h2_at_top_of_body_is_refused():
     body = "## Bonus\n\nfree text\n\n" + _v2_body()
     with pytest.raises(ValidationError, match=r"unexpected section.*Bonus"):
         validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+# --- V6: per-section word caps ---
+
+def test_section_over_its_word_cap_is_refused_with_actual_count():
+    long_section = " ".join(["word"] * 51)  # cap is 50
+    body = _v2_body(**{"Work context": long_section})
+    with pytest.raises(ValidationError, match=r"Work context.*51.*50"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_each_section_has_its_own_cap():
+    long_section = " ".join(["word"] * 101)  # Recent months cap is 100
+    body = _v2_body(**{"Recent months": long_section})
+    with pytest.raises(ValidationError, match=r"Recent months.*101.*100"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_section_at_exact_cap_passes():
+    exact = " ".join(["word"] * 50)
+    body = _v2_body(**{"Work context": exact})
+    try:
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+    except ValidationError as e:
+        assert "Work context" not in str(e), f"V6 should pass at exact cap: {e}"
