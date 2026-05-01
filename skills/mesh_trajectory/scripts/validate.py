@@ -4,13 +4,16 @@ Usage as CLI:
     python -m skills.mesh_trajectory.scripts.validate path/to/user.md
 """
 import sys
+from datetime import date
 from pathlib import Path
 import yaml
 from skills.mesh_trajectory.schema import (
     SCHEMA_FIELDS, REQUIRED_FIELDS, SCHEMA_VERSION,
+    ACCEPTED_SCHEMA_VERSIONS, MIGRATION_CUTOFF_DATE,
 )
 
 V0_ALLOWED_CITIES = frozenset({"Bengaluru"})
+# Legacy single-body word check; V6+V7 supersede this in later tasks.
 BODY_MIN_WORDS = 50
 BODY_MAX_WORDS = 300
 
@@ -19,27 +22,39 @@ class ValidationError(Exception):
     pass
 
 
-def validate_payload(frontmatter: dict, body: str) -> None:
+def validate_payload(frontmatter: dict, body: str, today: date | None = None) -> None:
+    today = today or date.today()
     keys = set(frontmatter.keys())
 
+    # V1: forbidden field rejection
     extra = keys - SCHEMA_FIELDS
     if extra:
         raise ValidationError(f"forbidden field(s) present: {sorted(extra)}")
 
+    # V2: required fields present
     missing = REQUIRED_FIELDS - keys
     if missing:
         raise ValidationError(f"missing required field(s): {sorted(missing)}")
 
-    if frontmatter["schema_version"] != SCHEMA_VERSION:
+    # V3: schema_version gate with migration window
+    sv = frontmatter["schema_version"]
+    if sv not in ACCEPTED_SCHEMA_VERSIONS:
         raise ValidationError(
-            f"schema_version must be {SCHEMA_VERSION}, got {frontmatter['schema_version']}"
+            f"schema_version must be one of {sorted(ACCEPTED_SCHEMA_VERSIONS)}, got {sv}"
+        )
+    if sv == 1 and today >= MIGRATION_CUTOFF_DATE:
+        raise ValidationError(
+            f"schema_version 1 not accepted after {MIGRATION_CUTOFF_DATE.isoformat()}; "
+            f"re-run /mesh-trajectory sync to migrate to schema_version 2"
         )
 
+    # city
     if frontmatter["city"] not in V0_ALLOWED_CITIES:
         raise ValidationError(
             f"city must be one of {sorted(V0_ALLOWED_CITIES)} in V0, got {frontmatter['city']}"
         )
 
+    # Legacy body word check (replaced by V6+V7 in subsequent tasks)
     word_count = len(body.split())
     if word_count < BODY_MIN_WORDS or word_count > BODY_MAX_WORDS:
         raise ValidationError(
