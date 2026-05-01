@@ -42,8 +42,12 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
 5. **Extract per-session corpora + manifest (single pass).** Run:
    ```bash
    ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.extract --to-dir /tmp/mesh_sess
+   COUNT=$(jq length /tmp/mesh_sess/manifest.json)
+   echo "Sessions found: $COUNT"
    ```
-   This writes one file per session at `/tmp/mesh_sess/<NNN>_<uuid>.txt` plus a manifest at `/tmp/mesh_sess/manifest.json`. Each manifest entry carries `session_id`, `project_slug_raw`, `project_slug_normalized`, `last_seen`, and `corpus_path`. Tell the user how many sessions were found (`jq length /tmp/mesh_sess/manifest.json`). Default extractor caps at 200 most-recent sessions and drops sessions with <500 chars of substantive content.
+   This writes one file per session at `/tmp/mesh_sess/<NNN>_<uuid>.txt` plus a manifest at `/tmp/mesh_sess/manifest.json`. Each manifest entry carries `session_id`, `project_slug_raw`, `project_slug_normalized`, `last_seen`, and `corpus_path`. Default extractor caps at 200 most-recent sessions and drops sessions with <500 chars of substantive content.
+
+   **Sparse-corpus guard:** if `COUNT` is 0, abort: tell the user "MESH reads your last 4 weeks of Claude Code session history; you have none. Use Claude Code on a real project for at least a week, then re-run." Delete `/tmp/mesh_sess` and stop. If `COUNT` is 1 to 4, use AskUserQuestion: "Only $COUNT sessions in the last 4 weeks. The trajectory will be short. Proceed, or stop and try later?" with options Proceed / Stop. If `COUNT >= 5`, continue without prompting.
 6. **Per-session digests.** For each entry in `/tmp/mesh_sess/manifest.json`, read the corpus file at `entry.corpus_path`, apply `prompts/per_session.md` (substitute `{{session_corpus}}`), and produce one digest sentence. Append all digests to `/tmp/mesh_digests.txt`, ordered most-recent-first. Each line is `<session_id> <YYYY-MM-DD> <digest>`. Use parallel subagents when there are >50 sessions; instruct each subagent to read manifest entries by index range and write a batch file (e.g. `/tmp/mesh_digests_batch_NN.txt`), then concatenate them into `/tmp/mesh_digests.txt`.
 7. **Privacy gate (corpora).** Delete the per-session corpus files now. The manifest stays - it carries metadata only (no corpus content).
    ```bash
@@ -107,7 +111,21 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     - **REDACT**: delete the span from `/tmp/mesh_body.md`.
     - **REPHRASE**: ask the user for replacement text and substitute the span.
     Apply each user decision to `/tmp/mesh_body.md` immediately. After all flags are resolved, if the redactions broke sentence flow, offer to re-synthesize from the original project summaries (which means returning to step 13 - in that case re-create `/tmp/mesh_project_summaries.txt` and `/tmp/mesh_why.txt` from your conversation context, since they were deleted at step 14).
-17. **User review.** Show updated `/tmp/mesh_body.md`. Ask for any final edits (open in $EDITOR or paste replacement). Loop until approved.
+17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in the public-among-attendees mesh-data repo. Frame it like this:
+
+    > "This is the EXACT 200-word body that will be pushed to mesh-data and visible to the founder + any future user the founder grants access to. Read it slowly. Things to look for:
+    > - Any internal codename, partner name, or customer name the lint missed
+    > - Any phrasing that reveals more than you'd say in a public LinkedIn post
+    > - Any wording you'd regret if a future hiring manager read it
+    >
+    > Want to edit, or push as-is?"
+
+    Use `AskUserQuestion` with options: "Push as-is", "Edit (paste replacement)", "Re-run lint with stricter flagging", "Abort onboarding (delete everything)", "You decide".
+
+    On "Edit": accept the user's replacement text, write it to `/tmp/mesh_body.md`, loop back to this step.
+    On "Re-run lint": loop back to step 15 with a stricter prompt addendum ("be more aggressive; flag any name, codename, project nickname, or claim of capability").
+    On "Abort": delete all `/tmp/mesh_*` and tell the user nothing was pushed.
+    On "Push as-is": continue to step 18.
 18. Compose the YAML frontmatter from collected answers. Write to `/tmp/mesh_fm.yaml`.
 19. Persist the profile for future `/mesh-sync` runs: `mkdir -p ~/.config/mesh && cp /tmp/mesh_fm.yaml ~/.config/mesh/profile.yaml`. Body is NOT persisted (always re-derived from fresh corpus).
 20. Run `cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.push $REPO_URL /tmp/mesh_fm.yaml /tmp/mesh_body.md` (cd matters: the push script clones mesh-data into a relative `~/.cache/mesh-data` and the import path resolves from the skill dir).
