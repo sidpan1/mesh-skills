@@ -145,6 +145,9 @@ def normalize_slug(slug: str) -> str:
                 if dash_idx != -1:
                     s = s[dash_idx + 1:]
 
+    if s.startswith("me-private-projects-"):
+        s = s[len("me-private-projects-"):]
+
     dd_idx = s.find("--")
     if dd_idx != -1:
         s = s[:dd_idx]

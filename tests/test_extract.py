@@ -285,9 +285,31 @@ def test_normalize_slug_strips_claude_worktree_suffix():
     assert normalize_slug(
         "-Users-sidhant-panda-workspaces-root-workspace-sage-workspaces-workspaces-projects-software-farms-poc--repos-sage-workspaces--sf-2-10-artifacts"
     ) == "software-farms-poc"
+    # me-private-projects- variant strips through to leaf project (see
+    # test_normalize_slug_strips_me_private_projects_prefix).
     assert normalize_slug(
         "-Users-sidhant-panda-workspaces-root-workspace-me-private-projects-hermes-admin--claude-worktrees-strange-archimedes-d871d7"
-    ) == "me-private-projects-hermes-admin"
+    ) == "hermes-admin"
+
+
+def test_normalize_slug_strips_me_private_projects_prefix():
+    """me-private-projects-<X> and <X> should collapse to the same logical project."""
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-me-private-projects-hermes-admin"
+    ) == "hermes-admin"
+    assert normalize_slug(
+        "-Users-sidhant-panda-workspaces-root-workspace-me-private-projects-hermes-admin--claude-worktrees-strange-archimedes-d871d7"
+    ) == "hermes-admin"
+
+
+def test_normalize_slug_me_private_does_not_eat_unrelated_projects():
+    """me-private-projects- prefix only strips when present; unrelated slugs unchanged."""
+    assert normalize_slug(
+        "-Users-x-workspaces-root-workspace-me-private-projects-foo"
+    ) == "foo"
+    assert normalize_slug(
+        "-Users-x-workspaces-root-workspace-mesh"
+    ) == "mesh"
 
 
 def test_group_by_project_collapses_sessions(tmp_path):
