@@ -617,3 +617,100 @@ This plan is ready to execute in a fresh Claude Code conversation.
 3. Use `superpowers:subagent-driven-development` to dispatch per-task subagents OR execute inline. Tasks 1-4 are codable; Task 5 is manual (the founder + a friend).
 4. After Task 5 verifies (or fails informatively), append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, the friend's verification outcome, and open items handed off to plan 05.
 5. Then ask the user whether to author plan 05 now (likely scope: digest cache, `/mesh-orchestrate` end-to-end dry-run, AskUserQuestion lint grouping refinements).
+
+---
+
+# EXECUTION LOG (2026-05-01)
+
+Executed in a single Claude Code session via inline TDD + UX hardening. Code commits on this repo: `fd79aa0`, `dbd0394`, `2be0095`, `35b65ba`, `3553a0f`, `eea02ed`, `ef0f067`, `1f08200`, `523875f`. No new pushes to `mesh-data` in this iteration; the founder's plan 03 push at `ebceb499` remains the only user file. mesh-data was flipped to PUBLIC mid-iteration as a launch-window operational override (reverts post-launch).
+
+## Task status
+
+| Task | Status | Commit(s) | Notes |
+|---|---|---|---|
+| 1. `extract_per_session_to_disk` + manifest | DONE | `fd79aa0` | TDD: 3 RED tests, then GREEN. 69 → 72. CLI gains `--to-dir`; existing callers untouched. |
+| 2. me-private slug normalization | DONE | `dbd0394` | TDD: 2 new tests + 1 updated (plan-03's worktree-suffix test now expects further collapse to `hermes-admin`). 72 → 74. Real-corpus smoke confirmed only `hermes-admin` in the hermes/me-private space (was 2 buckets in plan 03). |
+| 3. `/mesh-trajectory` rename to `/mesh` | SKIPPED | — | User decision mid-session ("3 is not needed - skip it"). Slash command stays `/mesh-trajectory`. The fictional-sub-commands fix moved into Task 4 as args-routing without rename. |
+| 4. SKILL.md single-extract flow + args-routing | DONE | `2be0095` | Bundled the args-routing (formerly Task 3's functional half) with the single-extract pipeline rewrite. Section headers (`## /mesh-onboard flow` etc.) preserved for searchability against plans 01-03 EXECUTION LOGs. ONBOARD.md, spec.md, CLAUDE.md user-facing references switched to `/mesh-trajectory <action>`. |
+| 5. Friend-machine end-to-end dogfood | DEFERRED | — | Not exercised in this iteration. Handed to plan 05 as the highest-priority remaining verification. |
+
+Beyond the plan-04 scope, the iteration also shipped seven UX hardenings that were not in the original task list:
+
+| Beyond-scope work | Status | Commit | Notes |
+|---|---|---|---|
+| Self-contained paste-and-go ONBOARD.md | DONE | `35b65ba` | Removed founder pre-launch reminder block; idempotent install; profile-existence-aware routing. |
+| Public mesh-skills repo on GitHub | DONE | (gh repo create) | `gh repo create sidpan1/mesh-skills --public --source=. --remote=origin --push`. mesh-data remained PRIVATE at this point. |
+| README referenced paste prompt + privacy split | DONE | `3553a0f` | Quick-start section that fetches ONBOARD.md from `main` instead of pasting the long form. |
+| Top-to-bottom UX hardening (9 fixes) | DONE | `eea02ed` | 4-step framing, Python 3.11+ assertion, sparse-corpus guard mirrored in SKILL.md, final-review elevated to load-bearing privacy gate, schema version banner, progress beats `[N/4]`, plain-English Step 0, verb consistency. Founder script `scripts/grant_mesh_data_access.sh` (handles, --file, --dry-run, idempotent). |
+| Claude-driven access request via gh issue | DONE | `ef0f067` | Step 2 ACCESS_DENIED branch: detects user's GH handle, AskUserQuestion to file an `Access request: <handle>` issue on the public mesh-skills repo. Founder script gains `--pending` mode that grants the issue **author's** handle (not the title text - spoofing protection) and closes the issue. |
+| Fix gh search indexing latency | DONE | `1f08200` | Found via end-to-end test: `gh issue list --search "... in:title"` returned `[]` for an issue created seconds before. Switched to list-then-jq-filter. Re-verified round-trip with a real test issue. |
+| Launch-window mesh-data public + disclosures | DONE | `523875f` | User-directed override of D8/HC#2: `mesh-data` flipped PUBLIC for launch window, reverts post-launch. Step 2 access check redesigned from `git ls-remote` (read, always passes on public) to `gh api .../collaborators/$HANDLE` (write, real failure mode). Disclosures added to ONBOARD Step 0, SKILL step 17, spec D8 + Privacy, CLAUDE HC #2, README Privacy. |
+
+## What worked
+
+1. **TDD discipline held.** Tasks 1 and 2 each cycled RED → implement → GREEN → commit cleanly. The me-private fix even forced an honest update of plan-03's worktree-suffix test (it now expects the further collapse), which kept the test suite consistent rather than shadowing the change.
+2. **Args-routing collapses the launch-blocker without ceremony.** Plan 04 originally bundled rename + routing in Task 3. Splitting them mid-session let us ship the routing (the actual launch fix) without the symlink dance and without breaking founder muscle memory.
+3. **Single-extract closes the privacy-contract race.** Plan 03's smoke had lost 1/167 sessions silently across two extract calls. The new flow extracts once, writes a manifest, and step 8 reads metadata-only from it. Step 7's `find ... -delete` keeps the privacy gate timing intact (corpus deleted; manifest survives one more step).
+4. **End-to-end testing caught the gh search latency bug.** Without the "test it out once" pass, the founder would have run `--pending` on launch night, seen "no pending" while real issues piled up, and panicked. Catching this with a synthetic test issue + cleanup was clean.
+5. **Public-flip + access-check fix bundled.** When mesh-data went public, `git ls-remote` started passing for everyone (read access is implicit on public repos), which would have let non-collaborators sail through Step 2 and fail confusingly at push time. The fix to use the collaborator API for a true write-access check was a real bug surfaced by the visibility change, not a UX nice-to-have.
+6. **Documentation honesty as a first-class deliverable.** Five files (`ONBOARD.md`, `SKILL.md`, `spec.md`, `CLAUDE.md`, `README.md`) now disclose the launch-window public state with a specific revert target. If we'd flipped silently, the onboarding prompt would tell every attendee "private repo" while pushing to a public one.
+
+## What didn't work / had to be hardened mid-flight
+
+1. **gh issue search has indexing latency** (caught at end-to-end test, fixed in `1f08200`). New issues are not visible to `--search "... in:title"` for up to several minutes; the same issues are immediately visible via plain `--json` list. Replaced with list-then-jq-filter. Deterministic, no wait. Worth canonicalizing for any future gh-API-driven control plane.
+2. **Step 2's read-vs-write semantics changed under us when mesh-data went public.** `git ls-remote` was sufficient when both read and write tracked together (private repo, collaborator-only). Once public, read divorced from write; the original check became a silent permissive false-positive. Redesigned to `gh api .../collaborators/$HANDLE`, which checks the actual auth boundary attendees care about. Side benefit: the access-request flow remains useful even with public mesh-data (write still gated).
+3. **Plan 03's `me-private-projects-hermes-admin` worktree test had to be flipped, not added to.** Task 2 expected a clean "add new tests" path; reality required updating one existing assertion that previously asserted the un-collapsed form. This meant editing test data committed in plan 03. Captured here so plan-history readers don't think a regression slipped in.
+4. **Mid-iteration scope expansion.** The iteration was authored as 5 tasks; it shipped 11 commits with deep UX work past task 4. The expansion was user-driven ("solve all the concerns from the UX pov", "test it out once", "make the mesh data repo public for now") and stayed inside the launch-readiness theme, but the original plan body undercounts what landed. Future iterations should either (a) plan with a "plus UX" appendix slot, or (b) split a clear "core fixes" iteration from "UX polish + launch ops" iteration.
+
+## Hardenings beyond the original plan
+
+1. **`scripts/grant_mesh_data_access.sh`** with `--file`, `--dry-run`, `--pending`, idempotent, `gh`-CLI-only (no tokens in repo). `--pending` round-trip (read open issues, grant authors, comment, close) is the launch-night ergonomics win.
+2. **Sparse-corpus guard** mirrored in BOTH places. ONBOARD.md Step 3 catches it before slash-command runs; SKILL.md step 5 catches it for direct `/mesh-trajectory onboard` invocations that bypass ONBOARD. Either path can stop at 0, AskUserQuestion-warn at 1-4, proceed at 5+.
+3. **Final review elevated to load-bearing privacy gate.** SKILL.md step 17 is now an explicit AskUserQuestion with four options (Push as-is / Edit / Re-run lint stricter / Abort) that frames the body as world-readable. Especially important during the launch-window public state.
+4. **Python 3.11+ assertion at install time.** Earlier silent-fail-at-import is now loud-fail-with-instructions: `brew install python@3.11` (mac) or `apt install python3.11` (linux). pyproject already pinned 3.11; the README now matches.
+
+## Mid-flight architectural changes
+
+1. **`/mesh-trajectory` stays the registered slash command.** Plan 04 originally ranked the rename to `/mesh` as a Task 3 scope item; user skipped it. The args-routing piece - the actual launch-bug fix - moved into Task 4. Net effect: section headers in SKILL.md continue to read `## /mesh-onboard flow` etc., user types `/mesh-trajectory onboard` etc.
+2. **`mesh-data` temporarily PUBLIC.** D8 + the Privacy section + CLAUDE.md HC #2 all carry an explicit launch-window override with a revert target. This is the largest deviation from plan 04's "what stays unchanged" list. Documented end-to-end so the revert is a one-command + one-doc-flip-commit operation.
+3. **Access check semantic switched from read to write.** Forced by (2); see "What didn't work" item 2.
+
+## Verification result
+
+End-to-end success against the founder's machine.
+
+- **Tests:** 74/74 pass on every Task commit.
+- **Real-corpus smoke:** 91-92 sessions across 15 logical projects (was 18 in plan 03; the corpus has shifted in 5 days, and the me-private collapse merged 2 buckets into 1). Only `hermes-admin` in the hermes/me-private space.
+- **ONBOARD.md walked step-by-step:** Step 0 (URL fetchable) HTTP 200; Step 1 (Python 3.11+, idempotent install) PYTHON_OK + symlink intact; Step 2 (write access via collaborator API) ACCESS_OK for the founder, ACCESS_DENIED for `octocat` (correct); Step 3 (corpus check) 92 / 15 / proceed; Step 4 (profile detection) HAS_PROFILE → sync route.
+- **Founder script:** all four modes verified (`--help`, `--dry-run` handles, `--dry-run --pending` empty, `--dry-run --pending` with real test issue). Spoofing protection verified: title `octocat`, author `sidpan1`, script attributed to `sidpan1`. Test issue cleaned up.
+- **Public mesh-data live:** `curl -sI` returns HTTP 200 for the founder's user file with no auth.
+- **Privacy disclosures:** all 5 docs updated to match runtime state.
+
+The end-to-end trajectory flow itself was NOT re-run in this iteration (no new push to mesh-data) - plan 03 verified that pipeline; plan 04 hardens the surface around it. The next push will happen when the founder runs `/mesh-trajectory sync` in a fresh session.
+
+## Open items handed off to plan 05
+
+1. **Revert mesh-data to private after launch event** (target: 2026-05-09 post-dinner). One command + one doc-flip commit.
+2. **Friend-machine end-to-end dogfood** (plan 04 Task 5, never done). Highest-priority remaining verification: a non-founder run on a fresh laptop. Discovers install-friction that only surfaces outside the founder's environment.
+3. **`/mesh-orchestrate` end-to-end dry-run with real data.** Open since plan 02; never exercised. First Friday after second onboarded user is the natural moment.
+4. **Per-project digest cache.** At 92 sessions × ~3 min digest pass × 30 attendees, the weekly sync cost is non-trivial. Cache `~/.config/mesh/sessions/<UUID>.summary.md` and only re-digest NEW sessions on subsequent syncs.
+5. **`subagents`-filter generalization.** Plan 02 deferred; plan 03 didn't pick it up; plan 04 didn't either. Detect subagent sessions structurally (filename prefix, message-role patterns) rather than by slug name.
+6. **AskUserQuestion lint-flag grouping canonicalization** in SKILL.md step 16. Plan 03's verification grouped 4 adjacent-clause flags into one round; plan 04 didn't formalize this. Step 16 still says "one round per flag".
+7. **Digest UUID off-by-one reconciliation.** Plan 03 lost 1/167 silently; plan 04 didn't address. Reconcile each digest line's UUID against the manifest's session_id allowlist; flag or re-attribute strays.
+8. **Slash-command session-start cache** documented and worked around via the two-session UX dance (install in current session, run /mesh-trajectory in fresh session). If Claude Code platform fixes the cache, this dance can collapse.
+9. **mesh-data architectural split** (option C from the visibility decision): consider splitting `mesh-data` (private user trajectories) and `mesh-invites` (public dinner invites) for V0.1. Architecturally cleaner than a flag flip.
+10. **Plan 04's mid-iteration scope expansion** suggests a structural change to the iterate workflow itself: a "plus UX appendix" slot in plan templates so launch-readiness iterations can budget for the work that always emerges between "core fixes" and "ship".
+
+## Self-review checklist
+
+- [x] All tests pass (target: 74). Actual: 74.
+- [x] `extract_per_session_to_disk` writes per-session files + manifest in one call; manifest has `project_slug_normalized` populated.
+- [x] `normalize_slug("-Users-x-workspaces-root-workspace-me-private-projects-hermes-admin")` returns `hermes-admin`.
+- [x] On founder's real corpus, `me-private-projects-hermes-admin` no longer appears as a separate bucket; merged into `hermes-admin`.
+- [SKIPPED by user] `~/.claude/skills/mesh` exists; `~/.claude/skills/mesh-trajectory` does not. Task 3 skipped; mesh-trajectory stays the registered name.
+- [SKIPPED by user] SKILL.md frontmatter `name: mesh`. Stayed `name: mesh-trajectory`.
+- [x] ONBOARD.md install instructions reference `/mesh-trajectory <action>` not `/mesh-onboard`.
+- [x] No `/tmp/mesh_sessions.json` references remain in SKILL.md.
+- [x] SKILL.md flow has no second `extract_per_session` call.
+- [DEFERRED] One friend's machine successfully ran `/mesh onboard` end-to-end. Open in handoff item 2.
+- [x] Plans 01-03 commits and EXECUTION LOGs are NOT rewritten; this iteration only adds and modifies.
