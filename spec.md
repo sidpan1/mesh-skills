@@ -120,10 +120,12 @@ USER MACHINE                                          CENTRAL                   
 
 The complete, exhaustive payload that leaves the user's device. Any field not listed here MUST NOT be uploaded. The validator enforces this.
 
+### Frontmatter (8 fields, frozen)
+
 ```yaml
 ---
 # users/<email>.md frontmatter
-schema_version: 1
+schema_version: 2            # v2 since 2026-05-01; v1 accepted until 2026-06-01
 name: string                 # full name, e.g., "Asha Rao"
 email: string                # primary email, used as filename and dedup key
 linkedin_url: string         # full URL
@@ -136,16 +138,38 @@ do_not_match:                # emails to never seat at same table (optional)
   - "ex.colleague@example.com"
 embedding: null              # reserved for V0.1; always null in V0
 ---
-
-# Body of the file: 200-word trajectory summary written by the user's
-# local Claude after reading their last 4 weeks of Claude Code sessions.
-# User reviews and edits before commit. This is the only free-text field.
 ```
 
-**Notes**
+### Body (4 ordered H2 sections, total <= 250 words)
+
+```
+## Work context
+[<= 50 words: role, team, what you own]
+
+## Top of mind
+[<= 75 words: active threads, this/next 4 weeks]
+
+## Recent months
+[<= 100 words: last 3-6 months, what shipped and shifted]
+
+## Long-term background
+[<= 75 words: durable expertise, 1+ year horizon]
+```
+
+The body is the only free-text content that contains derived material from the user's sessions. The user reviews each section and the assembled whole before push. The pre-push validator (`skills/mesh_trajectory/scripts/validate.py`) refuses any deviation from this shape (V4 missing/order, V5 extras, V6 per-section caps, V7 total 250-word cap, V8 PII stop-list).
+
+### Locked artifacts
+
+`SCHEMA_FIELDS` and `SECTION_FIELDS` in `skills/mesh_trajectory/schema.py` are the single source of truth for the frontmatter keys and the body section names respectively. Adding, removing, or renaming either requires the same three-way commit pattern: `schema.py` + this section in `spec.md` + a failing test in `tests/test_schema.py` and `tests/test_validate.py`.
+
+### Migration
+
+`schema_version: 1` (single 200-word body) is accepted by both the validator and the orchestrator until `MIGRATION_CUTOFF_DATE = 2026-06-01`. Existing v1 users re-sync at their own pace via `/mesh-trajectory sync`. The orchestrator treats a v1 body as the entire `Recent months` section and leaves the other three empty (a deliberately crude adapter; the point is to push users to re-sync).
+
+### Notes
+
 - `do_not_match` was added during failure-mode review. Optional, costs nothing if empty.
-- `embedding` is reserved so V0.1 can populate without a schema migration. V0 matching uses Claude reading the summary text directly.
-- The 200-word body is the only field that contains derived content from the user's sessions. The user reviews and edits before any push.
+- `embedding` is reserved so V0.1 can populate without a schema migration. V0 matching uses Claude reading the section text directly.
 
 ---
 
