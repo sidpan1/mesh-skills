@@ -2015,3 +2015,78 @@ This plan is ready to execute in a fresh Claude Code conversation.
 5. Each task ends with one commit; do not batch commits across tasks.
 6. After Task 13, append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, dogfood result, and open items handed off to plan 06.
 7. Then ask the user whether to author plan 06 now (likely scope: incremental per-section sync `sync --section "Top of mind"`, adjacent-bets / side-projects section, founder-side `/mesh-orchestrate` dry-run with a v1+v2 mixed pool, lint grouping refinements).
+
+---
+
+# EXECUTION LOG (2026-05-01)
+
+## Task status
+
+| # | Task | Status | Commit |
+|---|---|---|---|
+| 1 | Schema constants for v2 | DONE | `4e09367` |
+| 2 | Validator V3 schema_version gate | DONE | `8ebc537` |
+| 3 | Validator V4 sections in order + parse_sections + v2 fixture | DONE | `3949fc8` |
+| 4 | Validator V5 no extra H2 headings | DONE | `6b26994` |
+| 5 | Validator V6 per-section word caps | DONE | `81fffdd` |
+| 6 | Validator V7 total body cap + legacy v1-only | DONE | `f5bcc24` |
+| 7 | Validator V8 PII stop-list | DONE | `380fade` |
+| 8 | Section-extraction prompts (4 files) | DONE | `d820d74` |
+| 9 | SKILL.md 4-section synthesize loop + per-section review | DONE | `c513e03` |
+| 10 | compose.md sections + weights | DONE | `6c03715` |
+| 11 | Orchestrator v1 adapter (User.sections) | DONE | `5ba3e3e` |
+| 12 | spec.md Data Schema -> v2 | DONE | `a6fdd7d` |
+| 13 | Verification (tests + CLI validate + mixed v1/v2 load) | PARTIAL | (no commit; manual /mesh-trajectory sync dogfood deferred to founder) |
+
+Plan was authored at commit `95da576` and executed in a single session. 12 implementation commits + plan commit.
+
+## Test counts
+
+- Baseline (start of session): 74 passing
+- After Task 13: **103 passing** (+29: 9 new in `test_schema.py` from the 6 v2 constants + sectional + version-set constants; 19 new in `test_validate.py` covering V3-V8 paths; 3 new in `test_load_users.py` covering the v1/v2 adapter)
+
+## What worked
+
+- The TDD ordering held: each task wrote tests first, confirmed RED, implemented minimally, confirmed GREEN, committed. Zero rewrites of prior tasks' code.
+- The `parse_sections` helper landed clean and was reused in five places (V4, V5, V6, V7, V8 all share `sections = parse_sections(body)`; the orchestrator adapter re-imports it). One implementation, multiple consumers, no duplication.
+- The fixture-first approach (`tests/fixtures/user_v2_valid.md`) caught real-shape issues that synthetic strings would have hidden. The fixture passes V1-V8 end-to-end, exercising the full pipeline against the exact shape extract.py will produce.
+- Routing the legacy 50-300 word body check into the v1-only branch (Task 6) cleanly handles backward compat without disabling the rule for v1 users still in the migration window.
+- Mixed v1/v2 dogfood (Task 13 step) confirmed the orchestrator adapter populates `User.sections` correctly on both shapes: v2 gets all four section keys populated; v1 gets only `Recent months`.
+
+## What didn't work first try
+
+- **Conflated Task 3 with Task 6.** I wrote the v1/else split for the legacy word check inside Task 3. Backed it out and put the legacy check back unconditional, then split it cleanly in Task 6 as the plan called for. Lesson: when a plan splits work across tasks, resist the urge to do the next task's work in the current task even when it's "obvious."
+- **Phone regex was too restrictive.** The plan-suggested regex `(?:(?:\+\d{1,3}[\s\-]?)?\d{3,5}[\s\-]?\d{3,4}[\s\-]?\d{3,4})` failed to match `+91 98765 43210` due to backtracking exhaustion (the trailing `\d{3,4}` had nothing to consume after the middle group consumed too greedily). Rewrote to `(?:\+?\d(?:[\s\-.]?\d){6,14})` which matches any 7-15 digit run with optional single-character separators between digits. Catches the same target shapes plus `415.555.0123` style. The v2 fixture still passes (no 7+ digit runs in the body).
+- **`test_body_too_short_is_refused_legacy`** initially used `VALID_V2`. After Task 3 added V4, a too-short v2 body trips the missing-sections check before reaching the legacy word check. Re-scoped the test to use `VALID_V1` so it actually exercises the legacy code path during the migration window.
+
+## Hardenings beyond the original plan
+
+- The fixture body was deliberately scrubbed of digit-heavy phrases ("12-person", "v2", "Eight years", "six months") that could have collided with the V8 phone regex. Reads slightly less specific but is robust against the regex evolving.
+- Stop-list seed file is committed at `skills/mesh_trajectory/pii_stoplist.txt` with full schema documentation in the file header (override path, comment syntax, intent). The override path is also overridable via `$MESH_PII_EXTRA_PATH` for test isolation.
+
+## Mid-flight architectural changes
+
+None. The design doc held cleanly through implementation; no decisions had to be revisited.
+
+## Verification result
+
+- All 103 tests pass.
+- `python -m skills.mesh_trajectory.scripts.validate tests/fixtures/user_v2_valid.md` -> `OK`.
+- `python -m skills.mesh_trajectory.scripts.validate tests/fixtures/user_v1_legacy.md` -> `OK`.
+- Mixed v1/v2 load via `load_users_for_date`: v1 user reports populated sections `['Recent months']`, v2 user reports all four. Adapter wired through the User dataclass correctly.
+- No em-dashes in any modified file.
+- spec.md Data Schema section reflects v2 + migration paragraph.
+
+## What remains MANUAL (not done in this session)
+
+- **Real founder /mesh-trajectory sync against the actual ~/.claude/projects corpus.** Task 13 step 2 in the plan called for running the live skill flow end-to-end through the user-facing slash command. That requires the skill to execute inside a fresh Claude Code session, walking the per-section AskUserQuestion loops with the founder. The non-interactive execution session can verify code correctness (which it did) but not the live skill UX. The founder should run `/mesh-trajectory sync` once at their convenience to confirm the per-section review feels proportionate and the four prompts produce coherent output on real session history.
+- **Founder-side `/mesh-orchestrate` dry-run on a real mixed v1/v2 cohort.** The unit-level adapter is verified; the end-to-end matcher behavior on a real cohort is not.
+
+## Open items handed off to plan 06
+
+- **Live UX validation** (above): two manual dogfood runs to confirm the per-section review and the matcher behavior land. If either fails, plan 06 picks up the fix.
+- **`sync --section "Top of mind"` incremental flow.** Designed-for in this iteration but explicitly out of scope per Hard Constraint 5. Worth picking up after the live UX dogfood confirms the full-flow review feels heavy enough to warrant the partial-flow ergonomics.
+- **Adjacent-bets / side-projects section.** Re-evaluate after dinner #1 (2026-05-09) signals from real attendees on whether substrate/horizon decomposition was the right cut, or whether a side-projects axis would have helped.
+- **Lint grouping refinements.** If the per-section AskUserQuestion review feels heavy when stacked on top of the lint's per-flag resolution, consider folding low-severity flags into a single batch prompt (carry-over from plan 04 open decisions).
+- **V8 false-positive watch.** The phone regex is broad. If real founder content trips it on legitimate substrings (version strings, dates, ticket numbers, etc.), tighten with fixture tests, do not relax the rule.
+- **Migration cutoff `2026-06-01`.** Editable in `schema.py`. Re-assess after dinner #1 based on observable v1 -> v2 re-sync rate.
