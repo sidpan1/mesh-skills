@@ -3,13 +3,16 @@
 Usage as CLI:
     python -m skills.mesh_trajectory.scripts.validate path/to/user.md
 """
+import re
 import sys
+import unicodedata
 from datetime import date
 from pathlib import Path
 import yaml
 from skills.mesh_trajectory.schema import (
     SCHEMA_FIELDS, REQUIRED_FIELDS, SCHEMA_VERSION,
     ACCEPTED_SCHEMA_VERSIONS, MIGRATION_CUTOFF_DATE,
+    SECTION_FIELDS, SECTION_WORD_CAPS, TOTAL_BODY_WORD_CAP,
 )
 
 V0_ALLOWED_CITIES = frozenset({"Bengaluru"})
@@ -20,6 +23,35 @@ BODY_MAX_WORDS = 300
 
 class ValidationError(Exception):
     pass
+
+
+_H2_RE = re.compile(r"^##\s+(.+?)\s*$")
+
+
+def parse_sections(body: str) -> dict[str, str]:
+    """Walk markdown body, return ordered {h2_text: section_body} dict.
+
+    Heading text is NFC-normalized and stripped of trailing whitespace.
+    Section bodies preserve interior whitespace; leading/trailing newlines
+    are stripped. The returned dict preserves insertion order (Python 3.7+).
+    Lines before the first H2 are ignored (no heading to attach to).
+    """
+    sections: dict[str, str] = {}
+    current_heading: str | None = None
+    current_lines: list[str] = []
+    for line in body.splitlines():
+        m = _H2_RE.match(line)
+        if m:
+            if current_heading is not None:
+                sections[current_heading] = "\n".join(current_lines).strip()
+            current_heading = unicodedata.normalize("NFC", m.group(1))
+            current_lines = []
+        else:
+            if current_heading is not None:
+                current_lines.append(line)
+    if current_heading is not None:
+        sections[current_heading] = "\n".join(current_lines).strip()
+    return sections
 
 
 def validate_payload(frontmatter: dict, body: str, today: date | None = None) -> None:
@@ -53,6 +85,32 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
         raise ValidationError(
             f"city must be one of {sorted(V0_ALLOWED_CITIES)} in V0, got {frontmatter['city']}"
         )
+
+    # V4: body has exactly SECTION_FIELDS H2 headings, in declared order.
+    # Skip V4 entirely for v1 payloads (they have a single-paragraph body).
+    if sv == 2:
+        sections = parse_sections(body)
+        actual = list(sections.keys())
+        expected = list(SECTION_FIELDS)
+
+        # Typo detection: case-only mismatch suggests a rename.
+        for a in actual:
+            for e in expected:
+                if a != e and a.lower() == e.lower():
+                    raise ValidationError(
+                        f"section heading typo: rename '{a}' to '{e}'"
+                    )
+
+        # V4 (continued): missing
+        missing = [e for e in expected if e not in actual]
+        if missing:
+            raise ValidationError(f"missing required section(s): {missing}")
+
+        # V4 (continued): order
+        if actual != expected:
+            raise ValidationError(
+                f"sections must appear in this order: {expected}; got: {actual}"
+            )
 
     # Legacy body word check (replaced by V6+V7 in subsequent tasks)
     word_count = len(body.split())

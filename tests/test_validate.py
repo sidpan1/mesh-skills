@@ -82,8 +82,9 @@ def test_city_must_be_bengaluru_in_v0():
 # --- legacy body word check (will be replaced by V6+V7 in Tasks 5+6) ---
 
 def test_body_too_short_is_refused_legacy():
+    # v1 still uses the legacy 50-300 word check during the migration window.
     with pytest.raises(ValidationError, match="body"):
-        validate_payload(VALID_V2, body="too short")
+        validate_payload(VALID_V1, body="too short")
 
 
 # --- parse_markdown framing (unchanged from plan 04) ---
@@ -107,3 +108,61 @@ def test_parse_markdown_refuses_empty_frontmatter(tmp_path):
     f.write_text("---\n---\n\nbody")
     with pytest.raises(ValidationError, match="mapping"):
         parse_markdown(f)
+
+
+# --- V4: exactly SECTION_FIELDS H2s, in order ---
+
+from pathlib import Path
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _fixture(name: str) -> tuple[dict, str]:
+    return parse_markdown(FIXTURES / name)
+
+
+def _v2_body(**overrides) -> str:
+    """Build a v2 body from sections; override individual sections by name."""
+    sections = {
+        "Work context": "founding engineer at a small fintech owning agent orchestration",
+        "Top of mind": "migrating an in house agent harness onto a unified runtime this quarter",
+        "Recent months": "shipped a new version of the underwriting agent stack and an offline eval harness",
+        "Long-term background": "several years backend systems plus prior ranking infrastructure work",
+    }
+    sections.update(overrides)
+    parts = []
+    for name in ("Work context", "Top of mind", "Recent months", "Long-term background"):
+        parts.append(f"## {name}\n\n{sections[name]}")
+    return "\n\n".join(parts)
+
+
+def test_v2_fixture_passes_v4():
+    fm, body = _fixture("user_v2_valid.md")
+    validate_payload(fm, body, today=date(2026, 5, 1))
+
+
+def test_missing_section_is_refused_with_section_name():
+    body = _v2_body()
+    body = body.replace(
+        "## Top of mind\n\nmigrating an in house agent harness onto a unified runtime this quarter\n\n",
+        "",
+    )
+    with pytest.raises(ValidationError, match="Top of mind"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_sections_out_of_order_are_refused():
+    body = (
+        "## Work context\n\nfounding engineer\n\n"
+        "## Recent months\n\nshipped a new version of the underwriting agent stack\n\n"
+        "## Top of mind\n\nmigrating an in house agent harness this quarter\n\n"
+        "## Long-term background\n\nseveral years backend systems\n"
+    )
+    with pytest.raises(ValidationError, match="order"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_section_heading_typo_is_refused_with_rename_hint():
+    body = _v2_body().replace("## Work context", "## Work Context")  # capital C
+    with pytest.raises(ValidationError, match=r"rename.*Work Context.*Work context"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
