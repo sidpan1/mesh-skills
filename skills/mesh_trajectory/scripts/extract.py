@@ -243,6 +243,52 @@ def extract_per_session(
     return sessions[:max_sessions]
 
 
+def extract_per_session_to_disk(
+    out_dir: Path,
+    projects_root: Path = DEFAULT_PROJECTS_ROOT,
+    weeks: int = DEFAULT_WEEKS,
+    now: str | None = None,
+    max_chars_per_session: int = 8_000,
+    min_corpus_chars: int = 500,
+    max_sessions: int = 200,
+    exclude_projects: frozenset[str] | set[str] | None = None,
+) -> Path:
+    """Extract sessions, write per-session corpus files + manifest. Return manifest path.
+
+    Each corpus file: <out_dir>/<NNN>_<uuid>.txt with header + delimited corpus.
+    Manifest: <out_dir>/manifest.json - ordered list of session metadata, most-recent-first.
+    """
+    sessions = extract_per_session(
+        projects_root=projects_root,
+        weeks=weeks,
+        now=now,
+        max_chars_per_session=max_chars_per_session,
+        min_corpus_chars=min_corpus_chars,
+        max_sessions=max_sessions,
+        exclude_projects=exclude_projects,
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest: list[dict] = []
+    for i, s in enumerate(sessions):
+        corpus_path = out_dir / f"{i:03d}_{s.session_id}.txt"
+        corpus_path.write_text(
+            f"SESSION_ID: {s.session_id}\n"
+            f"PROJECT_SLUG: {s.project_slug}\n"
+            f"LAST_SEEN: {s.last_seen.isoformat()}\n"
+            f"---CORPUS-BEGIN---\n{s.corpus}\n---CORPUS-END---\n"
+        )
+        manifest.append({
+            "session_id": s.session_id,
+            "project_slug_raw": s.project_slug,
+            "project_slug_normalized": normalize_slug(s.project_slug),
+            "last_seen": s.last_seen.isoformat(),
+            "corpus_path": str(corpus_path),
+        })
+    manifest_path = out_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    return manifest_path
+
+
 def _extract_text(inner) -> str:
     if not isinstance(inner, dict):
         return ""
@@ -261,6 +307,19 @@ def _extract_text(inner) -> str:
 
 
 def main() -> int:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--to-dir",
+        type=Path,
+        default=None,
+        help="If set, write per-session files + manifest here and exit.",
+    )
+    args = parser.parse_args()
+    if args.to_dir is not None:
+        manifest_path = extract_per_session_to_disk(out_dir=args.to_dir)
+        print(manifest_path)
+        return 0
     print(extract_corpus())
     return 0
 

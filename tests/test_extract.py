@@ -6,6 +6,7 @@ from skills.mesh_trajectory.scripts.extract import (
     classify_bucket,
     extract_corpus,
     extract_per_session,
+    extract_per_session_to_disk,
     group_by_project,
     normalize_slug,
     scrub_message,
@@ -314,3 +315,74 @@ def test_classify_bucket_thresholds_inclusive():
     assert classify_bucket(5) == "REGULAR"
     assert classify_bucket(4) == "OCCASIONAL"
     assert classify_bucket(2) == "OCCASIONAL"
+
+
+def test_extract_per_session_to_disk_writes_files_and_manifest(tmp_path):
+    proj_root = tmp_path / "projects"
+    _make_jsonl(proj_root / "proj-a" / "uuid-aaa.jsonl", [
+        _msg("user", "x" * 600, "2026-04-22T10:00:00Z"),
+    ])
+    _make_jsonl(proj_root / "proj-b" / "uuid-bbb.jsonl", [
+        _msg("user", "y" * 600, "2026-04-23T10:00:00Z"),
+    ])
+    out_dir = tmp_path / "out"
+    manifest_path = extract_per_session_to_disk(
+        out_dir=out_dir,
+        projects_root=proj_root,
+        weeks=4,
+        now="2026-04-25T00:00:00Z",
+        min_corpus_chars=0,
+    )
+    assert manifest_path == out_dir / "manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text())
+    assert len(manifest) == 2
+    assert manifest[0]["session_id"] == "uuid-bbb"
+    assert manifest[1]["session_id"] == "uuid-aaa"
+    for entry in manifest:
+        assert "session_id" in entry
+        assert "project_slug_raw" in entry
+        assert "project_slug_normalized" in entry
+        assert "last_seen" in entry
+        assert "corpus_path" in entry
+        assert Path(entry["corpus_path"]).exists()
+        body = Path(entry["corpus_path"]).read_text()
+        assert "---CORPUS-BEGIN---" in body
+        assert "---CORPUS-END---" in body
+        assert f"SESSION_ID: {entry['session_id']}" in body
+
+
+def test_extract_per_session_to_disk_normalizes_slug_in_manifest(tmp_path):
+    proj_root = tmp_path / "projects"
+    _make_jsonl(
+        proj_root / "-Users-x-workspaces-root-workspace-mesh" / "uuid-aaa.jsonl",
+        [_msg("user", "x" * 600, "2026-04-22T10:00:00Z")],
+    )
+    out_dir = tmp_path / "out"
+    extract_per_session_to_disk(
+        out_dir=out_dir,
+        projects_root=proj_root,
+        weeks=4,
+        now="2026-04-25T00:00:00Z",
+        min_corpus_chars=0,
+    )
+    manifest = json.loads((out_dir / "manifest.json").read_text())
+    assert manifest[0]["project_slug_raw"] == "-Users-x-workspaces-root-workspace-mesh"
+    assert manifest[0]["project_slug_normalized"] == "mesh"
+
+
+def test_extract_per_session_to_disk_creates_out_dir(tmp_path):
+    proj_root = tmp_path / "projects"
+    _make_jsonl(proj_root / "p" / "u.jsonl", [
+        _msg("user", "x" * 600, "2026-04-22T10:00:00Z"),
+    ])
+    out_dir = tmp_path / "out" / "nested"
+    extract_per_session_to_disk(
+        out_dir=out_dir,
+        projects_root=proj_root,
+        weeks=4,
+        now="2026-04-25T00:00:00Z",
+        min_corpus_chars=0,
+    )
+    assert out_dir.exists()
+    assert (out_dir / "manifest.json").exists()
