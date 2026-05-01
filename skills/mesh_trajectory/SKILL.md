@@ -88,7 +88,33 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     ```
 11. **Show the user the project summaries.** Print `/tmp/mesh_project_summaries.txt`. Ask: "Do these project summaries cover what you've actually been doing? Any project you want to drop, or any summary that mis-frames what you did?" Loop until approved.
 12. **Why-seed.** Default to inferring the why-seed from the project mix; print the inferred sentence and offer the user a one-line override before synthesis. Save the chosen sentence to `/tmp/mesh_why.txt`.
-13. **Synthesize.** Read `prompts/summarize.md`, substitute `{{why_seed}}` (from `/tmp/mesh_why.txt`) and `{{project_summaries}}` (from `/tmp/mesh_project_summaries.txt`). Generate the 200-word trajectory paragraph in your response. Write it to `/tmp/mesh_body.md`.
+13. **Synthesize the four sections.** For each `<section>` in this exact order: `Work context`, `Top of mind`, `Recent months`, `Long-term background`:
+    a. Read `prompts/sections/<snake_case>.md` (i.e. `work_context.md`, `top_of_mind.md`, `recent_months.md`, `long_term_background.md`).
+    b. Substitute `{{project_summaries}}` (from `/tmp/mesh_project_summaries.txt`), `{{why_seed}}` (from `/tmp/mesh_why.txt`), and `{{prior_section}}` (the existing same-named section from the user's current `users/<email>.md` in the local mesh-data clone, parsed via `parse_sections`; empty string on first sync; for a v1 file the entire body string).
+    c. Generate the section body in your response. The model output MUST be plain text under the per-section word cap (50 / 75 / 100 / 75 words for the four sections respectively). If your output exceeds the cap, regenerate with a "tighter, drop the least-essential clause" instruction.
+    d. Append `## <Section>\n\n<section_body>\n\n` to `/tmp/mesh_body.md` in the canonical order. Use `>> /tmp/mesh_body.md` from the controller; create the file fresh at the start of step 13a (`: > /tmp/mesh_body.md`).
+    e. Show the user the section just written and ask: "Does this section land? Edit, regenerate, or accept?" Loop on Edit/Regenerate before moving to the next section.
+
+    After all four sections are written, the assembled `/tmp/mesh_body.md` will look like:
+    ```
+    ## Work context
+
+    <50 words max>
+
+    ## Top of mind
+
+    <75 words max>
+
+    ## Recent months
+
+    <100 words max>
+
+    ## Long-term background
+
+    <75 words max>
+    ```
+
+    The pre-push validator (V4-V7) refuses any deviation from this shape; V8 refuses obvious PII (phone, foreign email, address, stop-list terms).
 14. **Privacy gate (intermediate).** Delete the project summaries + why-seed:
     ```bash
     rm -f /tmp/mesh_project_summaries.txt /tmp/mesh_why.txt
@@ -111,25 +137,25 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     - **REDACT**: delete the span from `/tmp/mesh_body.md`.
     - **REPHRASE**: ask the user for replacement text and substitute the span.
     Apply each user decision to `/tmp/mesh_body.md` immediately. After all flags are resolved, if the redactions broke sentence flow, offer to re-synthesize from the original project summaries (which means returning to step 13 - in that case re-create `/tmp/mesh_project_summaries.txt` and `/tmp/mesh_why.txt` from your conversation context, since they were deleted at step 14).
-17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in mesh-data. Frame it like this:
+17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in mesh-data. Then for EACH of the four sections in turn, ask one focused question via `AskUserQuestion`:
 
-    > "This is the EXACT 200-word body that will be pushed to mesh-data.
+    > **Section: <Work context | Top of mind | Recent months | Long-term background>**
+    > <render this section's body, exactly>
     >
-    > **Launch-window note (2026-05-01):** mesh-data is currently PUBLIC. Anyone on the internet can read this body until the founder reverts the repo to private after the launch event. Treat it as a public LinkedIn post.
+    > **Launch-window note (2026-05-01):** mesh-data is currently PUBLIC. Anyone on the internet can read this section until the founder reverts the repo to private after the launch event. The PII stop-list (V8) caught the obvious leaks; this is your last chance to catch what it missed.
     >
-    > Read it slowly. Things to look for:
-    > - Any internal codename, partner name, or customer name the lint missed
-    > - Any phrasing that reveals more than you'd say in a public LinkedIn post
-    > - Any wording you'd regret if a future hiring manager read it
-    >
-    > Want to edit, or push as-is?"
+    > Things to look for in this section:
+    > - Internal codenames, partner names, customer names the lint missed
+    > - Phrasing that reveals more than you'd say in a public LinkedIn post
+    > - Wording you'd regret if a future hiring manager read it
 
-    Use `AskUserQuestion` with options: "Push as-is", "Edit (paste replacement)", "Re-run lint with stricter flagging", "Abort onboarding (delete everything)", "You decide".
+    Options for each section: "Keep section as-is", "Edit (paste replacement)", "Regenerate from project summaries", "You decide".
 
-    On "Edit": accept the user's replacement text, write it to `/tmp/mesh_body.md`, loop back to this step.
-    On "Re-run lint": loop back to step 15 with a stricter prompt addendum ("be more aggressive; flag any name, codename, project nickname, or claim of capability").
-    On "Abort": delete all `/tmp/mesh_*` and tell the user nothing was pushed.
-    On "Push as-is": continue to step 18.
+    On "Edit": accept the user's replacement text, write it back into `/tmp/mesh_body.md` between the section's `## <name>` heading and the next `##`, loop back to this step for the same section.
+
+    On "Regenerate": loop back to step 13 for THIS section only (re-read the prompt, re-substitute, append). The other sections are not touched.
+
+    After all four sections are reviewed and accepted, ask once more: "Push the entire body to mesh-data, or abort?" with options "Push", "Abort (delete everything)", "You decide". On "Abort": delete all `/tmp/mesh_*` and stop, no push.
 18. Compose the YAML frontmatter from collected answers. Write to `/tmp/mesh_fm.yaml`.
 19. Persist the profile for future `/mesh-sync` runs: `mkdir -p ~/.config/mesh && cp /tmp/mesh_fm.yaml ~/.config/mesh/profile.yaml`. Body is NOT persisted (always re-derived from fresh corpus).
 20. Run `cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.push $REPO_URL /tmp/mesh_fm.yaml /tmp/mesh_body.md` (cd matters: the push script clones mesh-data into a relative `~/.cache/mesh-data` and the import path resolves from the skill dir).
@@ -166,3 +192,4 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
 - Only the validated, lint-reviewed payload reaches `mesh-data`. The schema validator REFUSES non-schema fields; the privacy lint asks the user about suspect content; never bypass either.
 - The user reviews TWO checkpoints before push: project summaries (step 11) and the final lint-reviewed body (step 17).
 - The skill does NOT touch GitHub credentials. It uses whatever the user's local git is already configured with (gh CLI, credential helper, SSH key, etc.). If access is missing, the skill aborts with a clear message instead of trying to authenticate.
+- The body is now four ordered H2 sections (`Work context`, `Top of mind`, `Recent months`, `Long-term background`). The pre-push validator refuses any deviation from this shape (V4 missing/order, V5 extras, V6 per-section caps, V7 total cap 250 words, V8 PII stop-list). The schema version is bumped to 2; v1 files are accepted by the orchestrator until 2026-06-01 via a crude adapter (the entire v1 body is treated as the `Recent months` section).
