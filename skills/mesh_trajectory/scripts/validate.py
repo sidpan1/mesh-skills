@@ -101,6 +101,14 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
                         f"section heading typo: rename '{a}' to '{e}'"
                     )
 
+        # V5: extras (H2 headings outside SECTION_FIELDS)
+        unexpected = [a for a in actual if a not in expected]
+        if unexpected:
+            raise ValidationError(
+                f"unexpected section heading(s) in body: {unexpected}; "
+                f"only {list(SECTION_FIELDS)} are allowed"
+            )
+
         # V4 (continued): missing
         missing = [e for e in expected if e not in actual]
         if missing:

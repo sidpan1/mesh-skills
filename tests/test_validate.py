@@ -166,3 +166,17 @@ def test_section_heading_typo_is_refused_with_rename_hint():
     body = _v2_body().replace("## Work context", "## Work Context")  # capital C
     with pytest.raises(ValidationError, match=r"rename.*Work Context.*Work context"):
         validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+# --- V5: no extra H2 headings outside SECTION_FIELDS ---
+
+def test_extra_h2_heading_in_body_is_refused():
+    body = _v2_body() + "\n\n## Personal context\n\nfamily of four in indiranagar"
+    with pytest.raises(ValidationError, match=r"unexpected section.*Personal context"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+def test_extra_h2_at_top_of_body_is_refused():
+    body = "## Bonus\n\nfree text\n\n" + _v2_body()
+    with pytest.raises(ValidationError, match=r"unexpected section.*Bonus"):
+        validate_payload(VALID_V2, body, today=date(2026, 5, 1))
