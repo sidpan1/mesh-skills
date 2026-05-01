@@ -50,22 +50,68 @@ git ls-remote --exit-code https://github.com/sidpan1/mesh-data HEAD >/dev/null 2
 
 If `ACCESS_OK`: tell the user **"[2/4] GitHub access verified."**
 
-If `ACCESS_DENIED`: do NOT continue. Look up the user's GitHub handle:
+If `ACCESS_DENIED`: do NOT continue. We will request access for them via GitHub itself, no DMs needed.
+
+First, check that `gh` CLI is installed and authenticated:
 
 ```bash
-gh api user --jq .login 2>/dev/null || echo ""
+command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && echo "GH_OK" || echo "GH_NOT_READY"
 ```
 
-Then give the user this exact ready-to-send message (substitute the handle if found, leave a placeholder if not):
+**If `GH_NOT_READY`:** tell the user to install + auth:
 
-> "Access denied. Send this WhatsApp / DM to the founder:
+> "I need the GitHub CLI (`gh`) to file your access request automatically.
 >
->     Hi! Adding me to MESH. GitHub handle: <THEIR_HANDLE_OR_ASK_THEM>.
->     Run:  gh api -X PUT repos/sidpan1/mesh-data/collaborators/<THEIR_HANDLE>/ -f permission=push
+>     mac:    brew install gh && gh auth login
+>     linux:  see https://cli.github.com
 >
-> Once the founder confirms, re-run this prompt. It will pick up where it left off."
+> Then re-run this prompt."
 
-Then stop the flow.
+Then stop.
+
+**If `GH_OK`:** detect the user's handle and offer to file the request:
+
+```bash
+HANDLE=$(gh api user --jq .login)
+echo "Detected GitHub handle: $HANDLE"
+```
+
+Use `AskUserQuestion`:
+
+- Question: "Your GitHub handle is `$HANDLE`. Open an access-request issue on sidpan1/mesh-skills? The founder gets notified by GitHub and grants access; this prompt picks up where it left off when you re-run."
+- Options:
+  1. "Yes, file the request now (Recommended)"
+  2. "I will message the founder directly"
+  3. "You decide"
+
+If they pick "Yes" (or "You decide"), run:
+
+```bash
+gh issue create \
+  -R sidpan1/mesh-skills \
+  --title "Access request: $HANDLE" \
+  --body "Filed automatically by /mesh-trajectory onboarding.
+
+Please add \`@$HANDLE\` as a collaborator (push permission) to \`sidpan1/mesh-data\` so I can complete MESH setup.
+
+Founder: run \`scripts/grant_mesh_data_access.sh --pending\` to grant all open access requests at once, or \`scripts/grant_mesh_data_access.sh $HANDLE\` for just this one."
+```
+
+Capture the URL `gh issue create` prints. Tell the user:
+
+> "[2/4] Access request filed: <ISSUE_URL>. The founder is notified. Once they grant access (the issue will be closed automatically), re-run this prompt and Step 2 will pass."
+
+Then stop.
+
+If they pick option 2 ("I will message the founder directly"), give them:
+
+> "Tell the founder via WhatsApp / DM:
+>
+>     'Add @$HANDLE to mesh-data, please.'
+>
+> Re-run this prompt once they confirm."
+
+Then stop.
 
 ## Step 3 of 4: Check the corpus has enough material
 

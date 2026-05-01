@@ -40,13 +40,19 @@ The `mesh-orchestrator` skill is in `skills/mesh_orchestrator/`. It runs on the 
 
 ### Grant attendees access to mesh-data
 
-`mesh-data` is private. Each attendee needs collaborator access on their GitHub handle before they can push their trajectory. Bulk-grant via:
+`mesh-data` is private. Each attendee needs collaborator access on their GitHub handle before they can push their trajectory. The flow is fully Claude-driven on the attendee side: when their `git ls-remote` access check fails, the onboarding prompt offers to file an access-request issue on the public `mesh-skills` repo automatically (`gh issue create` under the hood). You receive a normal GitHub issue notification.
+
+To grant pending requests in bulk (recommended for the launch event):
+
+    scripts/grant_mesh_data_access.sh --pending             # grant all open access-request issues, comment + close
+
+Or grant specific handles:
 
     scripts/grant_mesh_data_access.sh handle1 handle2 handle3
     scripts/grant_mesh_data_access.sh --file handles.txt   # one per line, # comments allowed
-    scripts/grant_mesh_data_access.sh --dry-run <handle>   # see what would happen
+    scripts/grant_mesh_data_access.sh --dry-run --pending   # see what would happen
 
-Idempotent: re-granting an existing collaborator is a no-op. Uses your local `gh` CLI auth (no tokens stored in the repo).
+`--pending` reads open issues with title `Access request: ...` (filed by ONBOARD.md Step 2), grants the **issue author's** handle (not the title text) push access on `mesh-data`, then comments and closes the issue. Idempotent: re-granting an existing collaborator is a no-op. Uses your local `gh` CLI auth (no tokens stored in the repo).
 
 ## Privacy
 
