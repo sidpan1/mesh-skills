@@ -56,4 +56,8 @@ Or grant specific handles:
 
 ## Privacy
 
-Two-repo split: `mesh-skills` (this repo, public) holds the skill code and onboarding flow. `mesh-data` (private) holds individual user trajectories. Raw Claude Code conversations never leave the user's device; only the validated, lint-reviewed 8-field payload is uploaded. See `spec.md` for the privacy contract.
+Two-repo split: `mesh-skills` (this repo, public) holds the skill code and onboarding flow. `mesh-data` holds individual user trajectories.
+
+**Launch-window override (2026-05-01):** `mesh-data` is temporarily PUBLIC during the launch event window for operational simplicity, reverting to private after the launch event. ONBOARD.md Step 0 and SKILL.md Step 17 disclose this so onboarders give informed consent before pushing.
+
+Raw Claude Code conversations never leave the user's device regardless of `mesh-data` visibility; only the validated, lint-reviewed 8-field payload is uploaded, and the user reviews it in a final pre-push gate. See `spec.md` for the privacy contract.

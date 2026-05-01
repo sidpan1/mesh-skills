@@ -53,7 +53,7 @@ Every choice below was made deliberately during brainstorming. Alternatives are 
 | D5 | **Plugin scope** | Clean module boundaries, no formal plugin API | Lightweight event bus; full plugin platform | YAGNI: extract a real plugin API after the 3rd plugin shows the right abstraction |
 | D6 | **Event format** | Kickoff event week 1, first dinner week 2 Saturday | Event IS the dinner; hybrid huddle + later dinner | Cleanest test of the actual product loop |
 | D7 | **Onboarding surface** | Paste-able prompt that asks minimal Q's + installs local skill | Form-only; manual conversation paste; GitHub-derived | Honest demo of the actual product, Claude-native from day 1 |
-| D8 | **Central infra** | Founder's laptop + private GitHub repo as DB | Cloud VM + Postgres; Google Sheet; Notion DB | Zero infra overhead; founder remains in the loop, desirable for first 3 dinners |
+| D8 | **Central infra** | Founder's laptop + GitHub repo as DB (private by default; PUBLIC during the 2026-05-01 launch window, reverting to private after the launch event) | Cloud VM + Postgres; Google Sheet; Notion DB | Zero infra overhead; founder remains in the loop, desirable for first 3 dinners. Launch-window public state is a temporary operational choice disclosed to all onboarders. |
 | D9 | **Matching mechanism** | **Claude is the matching engine** (single prompt over all summaries) | Embeddings + cosine similarity; hybrid Claude + embedding sanity check | Aligned with "Claude is the AI layer." Embeddings are V0.1 fast-filter when scale demands |
 | D10 | **Invite delivery** | Pure Claude-native: `/mesh-trajectory check` slash command pulls from git | Email link; auto-notify hook | No external send infra. Founder WhatsApps the cohort to "run /mesh-trajectory check" |
 | D11 | **Data schema** | Minimal 8-field document (see Data Schema) | Tags; opt-in highlights | Most defensible privacy posture. Tags revisit in V0.1 |
@@ -203,7 +203,7 @@ Privacy is not a "solve later" problem. It is the thing that kills adoption at t
   3. `/tmp/mesh_project_summaries.txt` + `/tmp/mesh_why.txt` (project-level intermediate + the user's why-seed) - deleted after synthesis.
 - Only the 8 schema fields above are uploaded. The pre-push validator REFUSES pushes that contain anything else.
 - An interactive privacy lint runs on the candidate body BEFORE push: local Claude flags suspect spans by category (career, family-health, internal-codename, customer-partner, other) and severity, and the user resolves each flag via `AskUserQuestion` with KEEP / REDACT / REPHRASE options. The user reviews the per-project summaries (one checkpoint) and the lint-reviewed body (second checkpoint) before any commit.
-- The mesh-data repo is private; access is limited to the founder and the user's own commits.
+- The mesh-data repo is private by default; **launch-window override (2026-05-01)**: temporarily PUBLIC during the launch event window for operational simplicity. ONBOARD.md Step 0 and SKILL.md Step 17 disclose this so onboarders treat their 200-word body as world-readable for the duration. The founder reverts to private after the launch event.
 - Users can inspect, edit, or delete their `users/<email>.md` at any time via `/mesh-trajectory sync`.
 
 ---

@@ -2,7 +2,9 @@
 
 > MESH schema v1. Last verified 2026-05-01.
 
-You are Claude. The user just pasted this into a fresh Claude Code session. Walk them through MESH onboarding end-to-end. MESH is a curated Saturday-7pm dinner club for Bengaluru builders; you will install a small skill on their machine, verify GitHub access, inspect their last 4 weeks of Claude Code work, and hand off to a single slash command that does the rest. Raw conversations never leave the user's device. Only a 200-word summary they review and approve gets pushed to a private repo.
+You are Claude. The user just pasted this into a fresh Claude Code session. Walk them through MESH onboarding end-to-end. MESH is a curated Saturday-7pm dinner club for Bengaluru builders; you will install a small skill on their machine, verify GitHub access, inspect their last 4 weeks of Claude Code work, and hand off to a single slash command that does the rest. Raw conversations never leave the user's device. Only a 200-word summary they review and approve gets pushed to a shared GitHub repo (`mesh-data`).
+
+> **Launch-window disclosure (2026-05-01).** During the launch event window, the `mesh-data` repo is PUBLIC for operational simplicity. The founder will revert it to private after the launch event. When the user reviews their 200-word body in step 17 of the trajectory flow, treat it as world-readable: only push what they would be comfortable being publicly indexable for ~24-48 hours. Disclose this to the user in step 0.
 
 You have four steps. Run them in order. Use Bash for shell commands, Read for files, AskUserQuestion when offering choices. After each step, tell the user it is done before moving to the next.
 
@@ -10,7 +12,7 @@ You have four steps. Run them in order. Use Bash for shell commands, Read for fi
 
 In your own words:
 
-> "MESH curates a Saturday-7pm dinner for 6 builders, matched on what you are actually building (read from your local Claude Code sessions). Four steps: install the skill, verify GitHub access, check your last 4 weeks have enough material, and run the summary flow in a fresh session. Raw conversations never leave your machine. Only a 200-word summary you review goes to a private repo. Continue?"
+> "MESH curates a Saturday-7pm dinner for 6 builders, matched on what you are actually building (read from your local Claude Code sessions). Four steps: install the skill, verify GitHub access, check your last 4 weeks have enough material, and run the summary flow in a fresh session. Raw conversations never leave your machine. Only a 200-word summary you review goes to a shared repo. **Launch-window note: the shared repo is currently public; the founder will revert it to private after the launch event. Treat your 200-word body as world-readable when you review it.** Continue?"
 
 If they decline, stop. Otherwise proceed.
 
@@ -42,23 +44,30 @@ If any line fails, surface the exact error to the user and stop. Common case: `p
 
 After success, tell the user: **"[1/4] Skill installed."**
 
-## Step 2 of 4: Verify GitHub access
+## Step 2 of 4: Verify GitHub WRITE access
 
-```bash
-git ls-remote --exit-code https://github.com/sidpan1/mesh-data HEAD >/dev/null 2>&1 && echo "ACCESS_OK" || echo "ACCESS_DENIED"
-```
+The user needs to push their `users/<email>.md` to `mesh-data`. With the launch-window public state, read access is automatic; write access still requires being a repo collaborator. We check write access directly.
 
-If `ACCESS_OK`: tell the user **"[2/4] GitHub access verified."**
-
-If `ACCESS_DENIED`: do NOT continue. We will request access for them via GitHub itself, no DMs needed.
-
-First, check that `gh` CLI is installed and authenticated:
+First, check that `gh` CLI is installed and authenticated (we need it both for the access check and, on failure, to file an access request):
 
 ```bash
 command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && echo "GH_OK" || echo "GH_NOT_READY"
 ```
 
-**If `GH_NOT_READY`:** tell the user to install + auth:
+**If `GH_NOT_READY`:** tell the user to install + auth (same instructions as the access-denied path below), then re-run.
+
+**If `GH_OK`:** check collaborator status:
+
+```bash
+HANDLE=$(gh api user --jq .login)
+gh api "repos/sidpan1/mesh-data/collaborators/$HANDLE" --silent 2>/dev/null && echo "ACCESS_OK" || echo "ACCESS_DENIED"
+```
+
+If `ACCESS_OK`: tell the user **"[2/4] GitHub write access verified ($HANDLE is a mesh-data collaborator)."**
+
+If `ACCESS_DENIED`: do NOT continue. We will request access for them via GitHub itself, no DMs needed.
+
+If the user fell through here from the `GH_NOT_READY` branch above, tell them:
 
 > "I need the GitHub CLI (`gh`) to file your access request automatically.
 >
@@ -69,14 +78,7 @@ command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && echo "GH_OK" 
 
 Then stop.
 
-**If `GH_OK`:** detect the user's handle and offer to file the request:
-
-```bash
-HANDLE=$(gh api user --jq .login)
-echo "Detected GitHub handle: $HANDLE"
-```
-
-Use `AskUserQuestion`:
+Otherwise (`GH_OK` but not a collaborator), use `AskUserQuestion`:
 
 - Question: "Your GitHub handle is `$HANDLE`. Open an access-request issue on sidpan1/mesh-skills? The founder gets notified by GitHub and grants access; this prompt picks up where it left off when you re-run."
 - Options:

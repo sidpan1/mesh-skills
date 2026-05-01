@@ -111,9 +111,13 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     - **REDACT**: delete the span from `/tmp/mesh_body.md`.
     - **REPHRASE**: ask the user for replacement text and substitute the span.
     Apply each user decision to `/tmp/mesh_body.md` immediately. After all flags are resolved, if the redactions broke sentence flow, offer to re-synthesize from the original project summaries (which means returning to step 13 - in that case re-create `/tmp/mesh_project_summaries.txt` and `/tmp/mesh_why.txt` from your conversation context, since they were deleted at step 14).
-17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in the public-among-attendees mesh-data repo. Frame it like this:
+17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in mesh-data. Frame it like this:
 
-    > "This is the EXACT 200-word body that will be pushed to mesh-data and visible to the founder + any future user the founder grants access to. Read it slowly. Things to look for:
+    > "This is the EXACT 200-word body that will be pushed to mesh-data.
+    >
+    > **Launch-window note (2026-05-01):** mesh-data is currently PUBLIC. Anyone on the internet can read this body until the founder reverts the repo to private after the launch event. Treat it as a public LinkedIn post.
+    >
+    > Read it slowly. Things to look for:
     > - Any internal codename, partner name, or customer name the lint missed
     > - Any phrasing that reveals more than you'd say in a public LinkedIn post
     > - Any wording you'd regret if a future hiring manager read it

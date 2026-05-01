@@ -16,7 +16,9 @@ Read `spec.md` first to understand the product. Then read the latest plan in `pl
 
 1. **Claude is the AI layer.** No external LLM APIs (no OpenAI, no embedding APIs, no third-party model providers). The user's local Claude does summarization. The founder's local Claude does matching. If a task seems to need an API call to anything other than GitHub, you have misunderstood the design. See D9 in `spec.md`.
 
-2. **GitHub is the only datastore.** Two repos: this one (`mesh-skills`, public, contains code + docs + the paste-able onboarding prompt) and `mesh-data` (private, contains `users/<email>.md` and `networking-dinners/dinner-YYYY-MM-DD/table-N.md`). No Postgres, no Redis, no S3, no web app, no API server. See D8.
+2. **GitHub is the only datastore.** Two repos: this one (`mesh-skills`, public, contains code + docs + the paste-able onboarding prompt) and `mesh-data` (contains `users/<email>.md` and `networking-dinners/dinner-YYYY-MM-DD/table-N.md`). No Postgres, no Redis, no S3, no web app, no API server. See D8.
+
+   **Launch-window override (2026-05-01).** `mesh-data` is temporarily PUBLIC during the launch event window for operational simplicity. The founder will revert it to private after the launch event (target: 2026-05-09 post-dinner). While public, ONBOARD.md, SKILL.md step 17 (final review), and any user-facing text MUST disclose this so attendees give informed consent. After revert, see commit history to find the date and update this note accordingly.
 
 3. **Privacy is enforced by code, not policy.** The pre-push validator (`skills/mesh_trajectory/scripts/validate.py`) MUST refuse any field outside the locked 8-field schema. Never bypass it. Never add fields without updating `SCHEMA_FIELDS` in `schema.py` AND the schema section in `spec.md` AND a corresponding test that fails before the field is allowed. See D11 + the Privacy section in `spec.md`.
 
