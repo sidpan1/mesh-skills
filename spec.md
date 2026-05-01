@@ -55,7 +55,7 @@ Every choice below was made deliberately during brainstorming. Alternatives are 
 | D7 | **Onboarding surface** | Paste-able prompt that asks minimal Q's + installs local skill | Form-only; manual conversation paste; GitHub-derived | Honest demo of the actual product, Claude-native from day 1 |
 | D8 | **Central infra** | Founder's laptop + private GitHub repo as DB | Cloud VM + Postgres; Google Sheet; Notion DB | Zero infra overhead; founder remains in the loop, desirable for first 3 dinners |
 | D9 | **Matching mechanism** | **Claude is the matching engine** (single prompt over all summaries) | Embeddings + cosine similarity; hybrid Claude + embedding sanity check | Aligned with "Claude is the AI layer." Embeddings are V0.1 fast-filter when scale demands |
-| D10 | **Invite delivery** | Pure Claude-native: `/mesh-check` slash command pulls from git | Email link; auto-notify hook | No external send infra. Founder WhatsApps the cohort to "run /mesh-check" |
+| D10 | **Invite delivery** | Pure Claude-native: `/mesh-trajectory check` slash command pulls from git | Email link; auto-notify hook | No external send infra. Founder WhatsApps the cohort to "run /mesh-trajectory check" |
 | D11 | **Data schema** | Minimal 8-field document (see Data Schema) | Tags; opt-in highlights | Most defensible privacy posture. Tags revisit in V0.1 |
 | D12 | **Hierarchical recursive summarization** | 3-layer: per-session -> per-project -> trajectory; bucket labels (CENTRAL/REGULAR/OCCASIONAL/ONE-OFF) provide texture without raw count weighting | Flat synthesis over per-session digests; flat synthesis over raw conversations | Plan 02 verification on the founder's real corpus (170 sessions across many logical projects) showed the flat synthesizer over-indexes on volume; one project with 80 sessions dominated the body at the expense of 25 other initiatives. The project layer ensures every project gets one slot in the synthesis input regardless of session count. |
 | D13 | **LLM-as-judge interactive privacy lint** | Local Claude judges the candidate body, returns JSON-flagged spans by category/severity; user resolves each flag via AskUserQuestion (KEEP/REDACT/REPHRASE) before push | Schema-only validator (D11) alone; regex denylist; pre-push human-only review with no automation | The schema validator (D11) checks field shape, not content. Plan 02 surfaced a personally-sensitive sentence in a session digest that did not reach the body only because the founder made an editorial call; for non-founder users this gap is load-bearing. LLM-as-judge catches novel phrasings a regex list cannot; per-flag interactive resolution preserves user agency over the final body. |
@@ -89,7 +89,7 @@ USER MACHINE                                          CENTRAL                   
 |        |                                |
 |        v user reviews + commits         |
 |   to mesh-data repo                     |
-|   /mesh-check displays invite when ready|
+|   /mesh-trajectory check shows invite |
 +-----------------------------------------+
 ```
 
@@ -112,7 +112,7 @@ USER MACHINE                                          CENTRAL                   
 
 - **Skill -> repo**: writes `users/<email>.md` with YAML frontmatter matching the *Data Schema* exactly. Pre-push validator REFUSES the push if any non-schema key is present.
 - **Orchestrator -> repo**: writes `networking-dinners/dinner-YYYY-MM-DD/table-N.md` with attendee list, venue, time, and a Claude-generated "why this table" narrative.
-- **Skill <- repo**: `/mesh-check` reads any `dinner-*` file mentioning the user's email and renders it.
+- **Skill <- repo**: `/mesh-trajectory check` reads any `dinner-*` file mentioning the user's email and renders it.
 
 ---
 
@@ -204,7 +204,7 @@ Privacy is not a "solve later" problem. It is the thing that kills adoption at t
 - Only the 8 schema fields above are uploaded. The pre-push validator REFUSES pushes that contain anything else.
 - An interactive privacy lint runs on the candidate body BEFORE push: local Claude flags suspect spans by category (career, family-health, internal-codename, customer-partner, other) and severity, and the user resolves each flag via `AskUserQuestion` with KEEP / REDACT / REPHRASE options. The user reviews the per-project summaries (one checkpoint) and the lint-reviewed body (second checkpoint) before any commit.
 - The mesh-data repo is private; access is limited to the founder and the user's own commits.
-- Users can inspect, edit, or delete their `users/<email>.md` at any time via `/mesh-sync`.
+- Users can inspect, edit, or delete their `users/<email>.md` at any time via `/mesh-trajectory sync`.
 
 ---
 

@@ -29,14 +29,14 @@ Read `spec.md` first to understand the product. Then read the latest plan in `pl
 Two Claude agents communicating through a single git repo:
 
 ```
-USER MACHINE                            CENTRAL                  DINNER
-mesh-trajectory skill   --git push-->   mesh-data repo  <--push-- mesh-orchestrator skill
-  /mesh-onboard                         users/*.md                  /mesh-orchestrate
-  /mesh-sync                            networking-dinners/*.md     (founder laptop, Friday)
-  /mesh-check (renders invite)
+USER MACHINE                              CENTRAL                  DINNER
+mesh-trajectory skill   --git push-->     mesh-data repo  <--push-- mesh-orchestrator skill
+  /mesh-trajectory onboard                users/*.md                  /mesh-orchestrate
+  /mesh-trajectory sync                   networking-dinners/*.md     (founder laptop, Friday)
+  /mesh-trajectory check (renders invite)
 ```
 
-The user-side skill extracts -> summarizes (via local Claude) -> validates -> pushes. The founder-side skill loads -> asks Claude to compose tables -> validates JSON -> writes invites -> pushes. The user-side skill's `/mesh-check` pulls and renders.
+The user-side skill extracts -> summarizes (via local Claude) -> validates -> pushes. The founder-side skill loads -> asks Claude to compose tables -> validates JSON -> writes invites -> pushes. The user-side skill's `/mesh-trajectory check` pulls and renders.
 
 ## Iterative plans workflow
 
@@ -136,7 +136,7 @@ pip install -e ".[dev]"
 ```
 
 Skill invocation (after install per `ONBOARD.md`):
-- User-side: `/mesh-onboard`, `/mesh-sync`, `/mesh-check`, `/mesh-status`
+- User-side: `/mesh-trajectory onboard`, `/mesh-trajectory sync`, `/mesh-trajectory check`, `/mesh-trajectory status` (single registered command, action arg routes to flow)
 - Founder-side: `/mesh-orchestrate <YYYY-MM-DD>` (defaults to next Saturday)
 
 ## How to extend safely
@@ -153,7 +153,7 @@ Every task in every plan follows: write failing test -> run, see it fail -> impl
 ## Out of scope reminders
 
 - No web app, no React, no frontend framework. The product surface is Claude Code slash commands.
-- No email send, no SMS, no WhatsApp API. The founder messages the cohort manually via WhatsApp; users see invites via `/mesh-check`.
+- No email send, no SMS, no WhatsApp API. The founder messages the cohort manually via WhatsApp; users see invites via `/mesh-trajectory check`.
 - No embeddings in V0. Claude reads the raw 200-word summaries and reasons over them. The `embedding` field is reserved in the schema but always `null` in V0.
 - No multi-city. `city` is hard-filtered to "Bengaluru" in `validate.py`.
 - No host marketplace, no payments, no agent-native API. All deferred to V0.1+.

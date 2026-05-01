@@ -44,11 +44,20 @@ If it succeeds (prints a SHA), the user is good. Continue to Step 3.
 
 If it fails with auth error: tell the user "Your GitHub auth doesn't have access to mesh-data yet. Ping the founder with your GitHub handle and they will grant you access. Re-run this step after they confirm." Then stop.
 
-## Step 3: Run /mesh-onboard
+## Step 3: Run /mesh-trajectory onboard
 
-Tell the user to run `/mesh-onboard`. The skill takes over from here.
+Tell the user to run `/mesh-trajectory onboard`. The skill takes over from here.
+
+The skill registers a single command, `/mesh-trajectory`, with an action argument:
+
+| Invocation | Flow |
+|---|---|
+| `/mesh-trajectory onboard` | First-time setup (this step). |
+| `/mesh-trajectory sync` | Re-extract + push update later in the week. |
+| `/mesh-trajectory check` | Show the dinner invite once it lands. |
+| `/mesh-trajectory status` | Show current user file + last sync. |
 
 ## Step 4 (founder, post-event):
 
-Once onboarded, the user will get an invite via `/mesh-check` on Friday evening.
+Once onboarded, the user will get an invite via `/mesh-trajectory check` on Friday evening.
 The dinner is the following Saturday at 7pm in Bengaluru.
