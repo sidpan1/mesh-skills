@@ -119,42 +119,38 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     ```
 11. **Show the user the project summaries.** Print `/tmp/mesh_project_summaries.txt`. Ask: "Do these project summaries cover what you've actually been doing? Any project you want to drop, or any summary that mis-frames what you did?" Loop until approved.
 12. **Why-seed.** Default to inferring the why-seed from the project mix; print the inferred sentence and offer the user a one-line override before synthesis. Save the chosen sentence to `/tmp/mesh_why.txt`.
-13. **Synthesize the four sections.** For each `<section>` in this exact order: `Work context`, `Top of mind`, `Recent months`, `Long-term background`:
-    a. Read `prompts/sections/<snake_case>.md` (i.e. `work_context.md`, `top_of_mind.md`, `recent_months.md`, `long_term_background.md`).
-    b. Substitute `{{project_summaries}}` (from `/tmp/mesh_project_summaries.txt`), `{{why_seed}}` (from `/tmp/mesh_why.txt`), and `{{prior_section}}` (the existing same-named section from the user's current `users/<email>.md` in the local mesh-data clone, parsed via `parse_sections`; empty string on first sync; for a v1 file the entire body string).
-    c. Generate the section body in your response. The model output MUST be plain text under the per-section word cap (50 / 75 / 100 / 75 words for the four sections respectively). If your output exceeds the cap, regenerate with a "tighter, drop the least-essential clause" instruction.
-    d. Append `## <Section>\n\n<section_body>\n\n` to `/tmp/mesh_body.md` in the canonical order. Use `>> /tmp/mesh_body.md` from the controller; create the file fresh at the start of step 13a (`: > /tmp/mesh_body.md`).
-    e. Show the user the section just written and ask: "Does this section land? Edit, regenerate, or accept?" Loop on Edit/Regenerate before moving to the next section.
+13. **L3: Synthesize four INTERMEDIATE sections (scratch, not pushed).** For each `<section>` in this exact order: `Work context`, `Top of mind`, `Recent months`, `Long-term background`:
+    a. Read `prompts/sections/<snake_case>.md` (i.e. `work_context.md`, `top_of_mind.md`, `recent_months.md`, `long_term_background.md`). Each prompt's intermediate cap is doubled vs the v2 final cap (100 / 150 / 200 / 150 words respectively).
+    b. Substitute `{{project_summaries}}` (from `/tmp/mesh_project_summaries.txt`), `{{why_seed}}` (from `/tmp/mesh_why.txt`), and `{{prior_section}}` (the existing same-named section from the user's current `users/<email>.md` in the local mesh-data clone, parsed via `parse_sections`; empty string on first sync; for a v1 file the entire body string; for a v2 file the matching v2 section).
+    c. Generate the section body in your response. The model output MUST be plain text under the per-section INTERMEDIATE cap (100/150/200/150). If your output exceeds the cap, regenerate with a "tighter, drop the least-essential clause" instruction.
+    d. Append `## <Section>\n\n<section_body>\n\n` to `/tmp/mesh_body_intermediate.md` in the canonical order. Use `>> /tmp/mesh_body_intermediate.md` from the controller; create the file fresh at the start of step 13a (`: > /tmp/mesh_body_intermediate.md`).
+    e. Do NOT show the intermediate sections to the user. They are scratch for L4. The user will review the final v3 body in step 17.
 
-    After all four sections are written, the assembled `/tmp/mesh_body.md` will look like:
-    ```
-    ## Work context
+    **Model:** Resolve via the routing config (per plan 07): `LAYER3_MODEL=$(~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing layer3)`. This step runs in the parent context; if your session is not on `$LAYER3_MODEL` (currently `opus`), surface the model-mismatch warning per plan 07.
 
-    <50 words max>
+13b. **L4: Coherence synthesis (final v3 body).** Read `prompts/sections/synthesize_coherent.md`. Substitute:
+    - `{{intermediate_sections}}` = the contents of `/tmp/mesh_body_intermediate.md` (the four sections L3 just produced, with their `## <heading>` markers preserved).
+    - `{{prior_body}}` = the body of the user's current `users/<email>.md` in mesh-data, stripped of the YAML frontmatter; empty string on first sync.
 
-    ## Top of mind
+    Generate the 5-section final v3 body in your response. The output MUST:
+    - Start with `## Summary`.
+    - Contain exactly the 5 v3 H2 headings in order: `Summary`, `Work context`, `Top of mind`, `Recent months`, `Long-term background`.
+    - Each section under its v3 cap (50/50/75/100/75 words).
+    - Total under 350 words.
 
-    <75 words max>
+    Write the response to `/tmp/mesh_body.md`. If the validator's V4-V7 (which run in step 18 below before push) would refuse the body (counts can be checked locally with `parse_sections`), regenerate with the specific failure ("Summary is 53 words, cap is 50") in the next prompt.
 
-    ## Recent months
+    **Model:** Resolve via the routing config: `LAYER4_MODEL=$(~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing layer4)`. This step also runs in the parent context; the configured layer4 model is `opus`. Surface the model-mismatch warning if the parent is not on Opus.
 
-    <100 words max>
-
-    ## Long-term background
-
-    <75 words max>
-    ```
-
-    The pre-push validator (V4-V7) refuses any deviation from this shape; V8 refuses obvious PII (phone, foreign email, address, stop-list terms).
-
-    **Model note.** This step runs in the current Claude Code session, not as a subagent; the parent's model cannot be changed mid-conversation. The configured layer3 model is `opus`. Resolve via:
+13c. **Privacy gate stage 4 (NEW).** Delete the L3 intermediate file. The final v3 body is the only thing that survives past this point.
 
     ```bash
-    ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing layer3
-    # Expected stdout: opus
+    rm -f /tmp/mesh_body_intermediate.md
+    ls /tmp/mesh_body* 2>&1
+    # Should show only /tmp/mesh_body.md
     ```
 
-    If you (the running Claude) are not on Opus, surface a one-line warning: "Note: layer3 (synthesis) is configured to use opus per skills/mesh_trajectory/config/model_routing.yaml; this session may be on a different model. Quality may regress."
+    The pre-push validator (V4-V7 for v3) refuses any deviation from the 5-section shape; V8 refuses obvious PII (phone, foreign email, address, stop-list terms).
 14. **Privacy gate (intermediate).** Delete the project summaries + why-seed:
     ```bash
     rm -f /tmp/mesh_project_summaries.txt /tmp/mesh_why.txt
@@ -179,9 +175,9 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     - **REDACT**: delete the span from `/tmp/mesh_body.md`.
     - **REPHRASE**: ask the user for replacement text and substitute the span.
     Apply each user decision to `/tmp/mesh_body.md` immediately. After all flags are resolved, if the redactions broke sentence flow, offer to re-synthesize from the original project summaries (which means returning to step 13 - in that case re-create `/tmp/mesh_project_summaries.txt` and `/tmp/mesh_why.txt` from your conversation context, since they were deleted at step 14).
-17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in mesh-data. Then for EACH of the four sections in turn, ask one focused question via `AskUserQuestion`:
+17. **FINAL REVIEW (load-bearing privacy gate).** This is the LAST point at which the user can prevent content from leaving their machine. Show the user the COMPLETE updated `/tmp/mesh_body.md` in a code block, exactly as it will appear in mesh-data. Then for EACH of the five sections in turn, ask one focused question via `AskUserQuestion`:
 
-    > **Section: <Work context | Top of mind | Recent months | Long-term background>**
+    > **Section: <Summary | Work context | Top of mind | Recent months | Long-term background>**
     > <render this section's body, exactly>
     >
     > **Launch-window note (2026-05-01):** mesh-data is currently PUBLIC. Anyone on the internet can read this section until the founder reverts the repo to private after the launch event. The PII stop-list (V8) caught the obvious leaks; this is your last chance to catch what it missed.
@@ -195,9 +191,9 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
 
     On "Edit": accept the user's replacement text, write it back into `/tmp/mesh_body.md` between the section's `## <name>` heading and the next `##`, loop back to this step for the same section.
 
-    On "Regenerate": loop back to step 13 for THIS section only (re-read the prompt, re-substitute, append). The other sections are not touched.
+    On "Regenerate": loop back to step 13b (the L4 coherence pass), with a stronger instruction for THIS section in the L4 prompt (e.g. "Make Summary punchier and 30-50 words"). Per-section regen-just-one-in-isolation is not supported; the v3 body is produced coherently in one L4 pass.
 
-    After all four sections are reviewed and accepted, ask once more: "Push the entire body to mesh-data, or abort?" with options "Push", "Abort (delete everything)", "You decide". On "Abort": delete all `/tmp/mesh_*` and stop, no push.
+    After all five sections are reviewed and accepted, ask once more: "Push the entire body to mesh-data, or abort?" with options "Push", "Abort (delete everything)", "You decide". On "Abort": delete all `/tmp/mesh_*` and stop, no push.
 18. Compose the YAML frontmatter from collected answers. Write to `/tmp/mesh_fm.yaml`.
 19. Persist the profile for future `/mesh-sync` runs: `mkdir -p ~/.config/mesh && cp /tmp/mesh_fm.yaml ~/.config/mesh/profile.yaml`. Body is NOT persisted (always re-derived from fresh corpus).
 20. Run `cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.push $REPO_URL /tmp/mesh_fm.yaml /tmp/mesh_body.md` (cd matters: the push script clones mesh-data into a relative `~/.cache/mesh-data` and the import path resolves from the skill dir).
@@ -347,12 +343,13 @@ The flow has 7 steps. Walk them in order. Privacy is enforced by structure (Clau
 
 ## Privacy contract
 
-- Three intermediate artifact stages ever live on disk, each gated by an immediate-delete step:
+- Four intermediate artifact stages ever live on disk, each gated by an immediate-delete step:
   1. `/tmp/mesh_sess/<NNN>_<uuid>.txt` (raw scrubbed per-session corpora) - deleted in step 7. The manifest at `/tmp/mesh_sess/manifest.json` continues until step 10 (it carries only metadata: session id, raw and normalized slugs, timestamp, file paths - no corpus content).
   2. `/tmp/mesh_digests.txt` + `/tmp/mesh_groups.json` (compressed per-session signals + grouping metadata) + the now-empty `/tmp/mesh_sess/` directory + `/tmp/mesh_proj_summaries/` (per-project subagent outputs) - deleted in step 10.
   3. `/tmp/mesh_project_summaries.txt` + `/tmp/mesh_why.txt` (project-level intermediate) - deleted in step 14.
+  4. `/tmp/mesh_body_intermediate.md` (L3 doubled-cap scratch sections that L4 compresses into the final v3 body) - deleted in step 13c. The user never sees the intermediate; only the final v3 body crosses any review or push.
 - A single `extract_per_session_to_disk` call in step 5 is the source of truth for the rest of the flow; step 8 reads the manifest, no second extract. This closes the race window where a privacy-sensitive session could appear in one extract pass but not the other.
 - Only the validated, lint-reviewed payload reaches `mesh-data`. The schema validator REFUSES non-schema fields; the privacy lint asks the user about suspect content; never bypass either.
 - The user reviews TWO checkpoints before push: project summaries (step 11) and the final lint-reviewed body (step 17).
 - The skill does NOT touch GitHub credentials. It uses whatever the user's local git is already configured with (gh CLI, credential helper, SSH key, etc.). If access is missing, the skill aborts with a clear message instead of trying to authenticate.
-- The body is now four ordered H2 sections (`Work context`, `Top of mind`, `Recent months`, `Long-term background`). The pre-push validator refuses any deviation from this shape (V4 missing/order, V5 extras, V6 per-section caps, V7 total cap 250 words, V8 PII stop-list). The schema version is bumped to 2; v1 files are accepted by the orchestrator until 2026-06-01 via a crude adapter (the entire v1 body is treated as the `Recent months` section).
+- The body is now FIVE ordered H2 sections in v3 (`Summary`, `Work context`, `Top of mind`, `Recent months`, `Long-term background`); v2's 4-section bodies are still accepted until 2026-07-01. The pre-push validator dispatches V4-V7 on `schema_version` (V4 missing/order, V5 extras, V6 per-section caps, V7 total cap 350 for v3 / 250 for v2; V8 PII stop-list applies to both). v1 files are accepted by the orchestrator until 2026-06-01; v2 files until 2026-07-01. The orchestrator's adapters populate the missing v3 sections (`Summary` for v2 inputs; `Summary` + the other 3 for v1 inputs which dump their full body into `Recent months`).
