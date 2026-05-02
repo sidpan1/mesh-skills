@@ -29,6 +29,15 @@ Founder-side skill, run on the founder's laptop on Friday morning to compose tab
 5. If fewer than 6 users available: print the list, ask founder whether to proceed (low-quorum dinner) or cancel. If proceed, set `low_quorum: true` for the prompt.
 6. Read `prompts/compose.md`. Substitute `{{dinner_date}}`, `{{venue}}`, `{{users_json}}` (from `/tmp/mesh_users.json`).
 7. Generate the response (you, Claude, ARE the matching engine here). Output the strict JSON per the prompt to `/tmp/mesh_response.json`.
+
+   **Model note.** The configured `compose` model is `opus`. Resolve via:
+
+   ```bash
+   ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing compose
+   # Expected stdout: opus
+   ```
+
+   If this flow is invoked by a wrapper that dispatches the founder-side sync as an Agent subagent (e.g. a future scheduled routine), pass `model: "opus"` (or the resolved value) on dispatch. If you (the running Claude) are not on Opus and there is no wrapper, surface the same one-line model-mismatch warning as user-side step 13.
 8. Validate the JSON (run from the skill dir):
    ```bash
    cd ~/.claude/skills/mesh-skills && ~/.claude/skills/mesh-skills/.venv/bin/python -c "from skills.mesh_orchestrator.scripts.parse_response import parse_response; import sys, json; print(json.dumps(parse_response(sys.stdin.read())))" < /tmp/mesh_response.json
