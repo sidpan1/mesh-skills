@@ -8,7 +8,7 @@ A factual statement of role, team, and what the user owns RIGHT NOW. Reads like 
 
 ## Output rules
 
-- <= 50 words. Hard cap; longer output will be refused at validation.
+- <= 100 words. This is INTERMEDIATE scratch; the coherence layer (L4) reads this and compresses it back to <=50 words for the final body. The user does not see this directly. Use the headroom for texture; do NOT pad.
 - One short paragraph, no headings, no bullets.
 - Plain text only.
 - No internal codenames, partner/customer names, phone numbers, or addresses (the privacy lint and V8 stop-list will refuse these).

@@ -8,7 +8,7 @@ The active threads. The thing that comes out when someone asks "what are you up 
 
 ## Output rules
 
-- <= 75 words. Hard cap.
+- <= 150 words. This is INTERMEDIATE scratch; L4 compresses to <=75 words for the final body. Use the headroom for texture; do NOT pad.
 - One paragraph, no headings, no bullets.
 - Specific over generic. "Migrating an in-house agent harness onto a unified runtime" beats "working on agent infrastructure."
 - No internal codenames, partner/customer names, phone numbers, addresses.

@@ -8,7 +8,7 @@ The substrate. What you would describe to someone asking "who is this person, pr
 
 ## Output rules
 
-- <= 75 words. Hard cap.
+- <= 150 words. This is INTERMEDIATE scratch; L4 compresses to <=75 words for the final body. Use the headroom for texture; do NOT pad.
 - One paragraph, no headings, no bullets.
 - Past-and-present tense. "Eight years building backend systems" plus current "comfortable in Python, Go."
 - No internal codenames, partner/customer names, phone numbers, addresses.

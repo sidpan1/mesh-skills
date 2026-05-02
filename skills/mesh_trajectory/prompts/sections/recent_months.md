@@ -8,7 +8,7 @@ Past-tense. Outcomes, not activity. Reads like the highlights paragraph of a qua
 
 ## Output rules
 
-- <= 100 words. Hard cap.
+- <= 200 words. This is INTERMEDIATE scratch; L4 compresses to <=100 words for the final body. Use the headroom for texture; do NOT pad.
 - One paragraph, no headings, no bullets.
 - Concrete over vague. "Shipped v2 of the underwriting agent stack" beats "improved customer experience."
 - Quantify when the inputs quantify (latency cuts, accuracy lifts, throughput).
