@@ -14,5 +14,6 @@
 layer1:  haiku   # per-session digest (Layer 1): one-sentence INITIATIVE compression
 layer2:  sonnet  # per-project summary (Layer 2): 80-120 word INITIATIVE paragraph
 layer3:  opus    # 4-section synthesis (Layer 3): final body, matching surface
+layer4:  opus    # coherence synthesis (Layer 4): rephrase + conjoin 4 intermediate sections into final 5-section body
 lint:    opus    # privacy LLM-as-judge: catches subtle disclosures Haiku/Sonnet miss
 compose: opus    # founder-side matcher: composes dinner tables (Guide x Explorer detection)

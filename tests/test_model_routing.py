@@ -34,9 +34,20 @@ def test_all_routes_returns_full_mapping():
         "layer1": "haiku",
         "layer2": "sonnet",
         "layer3": "opus",
+        "layer4": "opus",
         "lint":   "opus",
         "compose": "opus",
     }
+
+
+def test_layer4_is_opus():
+    assert get_model("layer4") == "opus"
+
+
+def test_all_routes_includes_layer4():
+    routes = all_routes()
+    assert "layer4" in routes
+    assert routes["layer4"] == "opus"
 
 
 def test_unknown_layer_raises():
