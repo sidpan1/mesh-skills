@@ -103,6 +103,15 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
    - If `session_count == 1`: pull the matching session digest from `/tmp/mesh_digests.txt`. Wrap as `Project: <project> (1 session, ONE-OFF)\n<digest>`.
    - If `session_count >= 2`: gather the matching session digests, read `prompts/per_project.md`, substitute `{{project_name}}`, `{{session_count}}`, `{{bucket}}`, and `{{digests}}` (the matching digests joined with newlines). Generate the 80-120 word INITIATIVE-level paragraph in your response. Wrap as `Project: <project> ({n} sessions, {BUCKET})\n<paragraph>`.
    Use parallel summarizer subagents when there are 5+ multi-session projects (each subagent owns 3-6 projects, writes to `/tmp/mesh_proj_summaries/<project>.txt`); the controller then concatenates into `/tmp/mesh_project_summaries.txt`.
+
+   **Model:** Resolve the per-layer model before dispatching summarizer subagents:
+
+   ```bash
+   LAYER2_MODEL=$(~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing layer2)
+   echo "Layer 2 (per-project) model: $LAYER2_MODEL"
+   ```
+
+   Then in each Agent dispatch for this step, set `model: "$LAYER2_MODEL"` (e.g. `sonnet`). For ONE-OFF projects (session_count == 1) there is no Agent dispatch (the controller pulls the digest directly), so layer2 routing does not apply.
 10. **Privacy gate (manifest + groups + digests).** Delete the manifest, groups, digests, and any per-project intermediate now:
     ```bash
     rm -rf /tmp/mesh_sess /tmp/mesh_proj_summaries
