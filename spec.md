@@ -60,6 +60,7 @@ Every choice below was made deliberately during brainstorming. Alternatives are 
 | D12 | **Hierarchical recursive summarization** | 3-layer: per-session -> per-project -> trajectory; bucket labels (CENTRAL/REGULAR/OCCASIONAL/ONE-OFF) provide texture without raw count weighting | Flat synthesis over per-session digests; flat synthesis over raw conversations | Plan 02 verification on the founder's real corpus (170 sessions across many logical projects) showed the flat synthesizer over-indexes on volume; one project with 80 sessions dominated the body at the expense of 25 other initiatives. The project layer ensures every project gets one slot in the synthesis input regardless of session count. |
 | D13 | **LLM-as-judge interactive privacy lint** | Local Claude judges the candidate body, returns JSON-flagged spans by category/severity; user resolves each flag via AskUserQuestion (KEEP/REDACT/REPHRASE) before push | Schema-only validator (D11) alone; regex denylist; pre-push human-only review with no automation | The schema validator (D11) checks field shape, not content. Plan 02 surfaced a personally-sensitive sentence in a session digest that did not reach the body only because the founder made an editorial call; for non-founder users this gap is load-bearing. LLM-as-judge catches novel phrasings a regex list cannot; per-flag interactive resolution preserves user agency over the final body. |
 | D14 | **Per-layer model routing** | Layer 1 (per-session digest) -> Haiku 4.5; Layer 2 (per-project summary) -> Sonnet 4.6; Layer 3 (4-section synthesis) -> Opus 4.7; privacy lint -> Opus 4.7; founder-side compose -> Opus 4.7. Encoded in `skills/mesh_trajectory/config/model_routing.yaml`; SKILL.md flows resolve the model at dispatch time via `scripts/model_routing.py`. | Opus across all layers (status quo); Sonnet across all layers (one model for everything); per-section model picking inside layer 3 | Plan 07's first end-to-end production sync ran the whole pipeline on Opus and consumed ~600K subagent tokens; per-session digest is a constrained extraction Haiku handles cleanly; per-project summary follows a rigid skeleton Sonnet handles well; matching signal lives in the 4-section synthesis and the privacy lint, both of which justify Opus. Config-driven so a future re-routing is one file edit (yaml + test + this row, in one commit). |
+| D15 | **Coherence synthesis layer (L4) + Summary section** | L3 produces 4 INTERMEDIATE sections at doubled caps (100/150/200/150 words, total 600); L4 reads those + the prior body and emits the FINAL v3 body of 5 sections (Summary + the existing 4) totaling <= 350 words. Schema bumps v2 -> v3; v2 accepted until 2026-07-01. | Status quo (v2: 4 sections, 250 words, no coherence layer); single bigger sections without coherence; replace 4 sections with one free-form paragraph | The 2026-05-02 founder sync produced a v2 body where the 4 sections read as 4 disconnected paragraphs because each was generated independently from the same project summaries with no cross-section awareness. Doubling intermediate caps gives L3 headroom to capture texture; L4 (Opus) compresses + rephrases for flow and adds a 50-word Summary as the matcher's narrative hook. Final body grows 40% (250 -> 350) but the user-facing review cost only grows by one section. |
 
 ---
 
@@ -126,7 +127,7 @@ The complete, exhaustive payload that leaves the user's device. Any field not li
 ```yaml
 ---
 # users/<email>.md frontmatter
-schema_version: 2            # v2 since 2026-05-01; v1 accepted until 2026-06-01
+schema_version: 3            # v3 since 2026-05-02; v2 accepted until 2026-07-01; v1 accepted until 2026-06-01
 name: string                 # full name, e.g., "Asha Rao"
 email: string                # primary email, used as filename and dedup key
 linkedin_url: string         # full URL
@@ -141,9 +142,12 @@ embedding: null              # reserved for V0.1; always null in V0
 ---
 ```
 
-### Body (4 ordered H2 sections, total <= 250 words)
+### Body (5 ordered H2 sections, total <= 350 words for v3)
 
 ```
+## Summary
+[<= 50 words: narrative hook; role + most distinctive current move + one substrate signal]
+
 ## Work context
 [<= 50 words: role, team, what you own]
 
@@ -157,7 +161,7 @@ embedding: null              # reserved for V0.1; always null in V0
 [<= 75 words: durable expertise, 1+ year horizon]
 ```
 
-The body is the only free-text content that contains derived material from the user's sessions. The user reviews each section and the assembled whole before push. The pre-push validator (`skills/mesh_trajectory/scripts/validate.py`) refuses any deviation from this shape (V4 missing/order, V5 extras, V6 per-section caps, V7 total 250-word cap, V8 PII stop-list).
+The body is the only free-text content that contains derived material from the user's sessions. The user reviews each section and the assembled whole before push. The pre-push validator (`skills/mesh_trajectory/scripts/validate.py`) refuses any deviation from this shape (V4 missing/order, V5 extras, V6 per-section caps, V7 total 350-word cap for v3 / 250 for v2, V8 PII stop-list).
 
 ### Locked artifacts
 
@@ -165,7 +169,12 @@ The body is the only free-text content that contains derived material from the u
 
 ### Migration
 
-`schema_version: 1` (single 200-word body) is accepted by both the validator and the orchestrator until `MIGRATION_CUTOFF_DATE = 2026-06-01`. Existing v1 users re-sync at their own pace via `/mesh-trajectory sync`. The orchestrator treats a v1 body as the entire `Recent months` section and leaves the other three empty (a deliberately crude adapter; the point is to push users to re-sync).
+Two migration windows run in parallel:
+
+- `schema_version: 1` (single 200-word body) accepted until `MIGRATION_CUTOFF_DATE_V2 = 2026-06-01`. The orchestrator treats a v1 body as the entire `Recent months` section; the other 4 sections are empty.
+- `schema_version: 2` (4-section body, total 250 words) accepted until `MIGRATION_CUTOFF_DATE_V3 = 2026-07-01`. The orchestrator populates `Summary = ""` for v2 users; the matcher redistributes the Summary weight across the other near-term sections.
+
+After each cutoff, the validator's V3 rule refuses the corresponding old version. Users re-sync at their own pace via `/mesh-trajectory sync`.
 
 ### Notes
 
