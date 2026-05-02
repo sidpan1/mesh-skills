@@ -146,6 +146,15 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     ```
 
     The pre-push validator (V4-V7) refuses any deviation from this shape; V8 refuses obvious PII (phone, foreign email, address, stop-list terms).
+
+    **Model note.** This step runs in the current Claude Code session, not as a subagent; the parent's model cannot be changed mid-conversation. The configured layer3 model is `opus`. Resolve via:
+
+    ```bash
+    ~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing layer3
+    # Expected stdout: opus
+    ```
+
+    If you (the running Claude) are not on Opus, surface a one-line warning: "Note: layer3 (synthesis) is configured to use opus per skills/mesh_trajectory/config/model_routing.yaml; this session may be on a different model. Quality may regress."
 14. **Privacy gate (intermediate).** Delete the project summaries + why-seed:
     ```bash
     rm -f /tmp/mesh_project_summaries.txt /tmp/mesh_why.txt
@@ -163,6 +172,8 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
     EOF
     ```
     If validation raises `LintParseError`, regenerate the lint output ONCE with a stricter "valid JSON only, no code fences, no preamble" reminder. If it fails twice, abort with: "Privacy lint pipeline failed twice. Body is at /tmp/mesh_body.md. Review manually before re-running /mesh-trajectory onboard or /mesh-trajectory sync."
+
+    **Model note.** Same as step 13: the lint judge runs in the current session, not as a subagent. The configured `lint` model is `opus`. Resolve via `python -m skills.mesh_trajectory.scripts.model_routing lint`. If the running session is not on Opus, surface the same one-line warning.
 16. **Interactive flag resolution.** For each flag returned by the lint, use `AskUserQuestion` with three options:
     - **KEEP**: leave the span as-is (user judges it acceptable).
     - **REDACT**: delete the span from `/tmp/mesh_body.md`.
