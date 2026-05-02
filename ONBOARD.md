@@ -18,29 +18,119 @@ If they decline, stop. Otherwise proceed.
 
 ## Step 1 of 4: Install the skill
 
-Run this single bash block. Safe to re-run on an already-installed machine.
+This step has two sub-flows depending on what Python the user has. Run the detection FIRST; then act on the result.
+
+### 1a. Detect Python
+
+Run this single block. It produces one of three outcomes: `PY_OK`, `PY_OLD`, or `PY_MISSING`. Capture the output before doing anything else.
+
+```bash
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "PY_MISSING"
+elif python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"; then
+  PYV=$(python3 -c "import sys; print('.'.join(str(x) for x in sys.version_info[:3]))")
+  echo "PY_OK $PYV"
+else
+  PYV=$(python3 -c "import sys; print('.'.join(str(x) for x in sys.version_info[:3]))")
+  echo "PY_OLD $PYV"
+fi
+```
+
+### 1b. Branch on the detection
+
+**If `PY_OK`:** Tell the user `"Python $PYV detected; proceeding."` and skip to step 1d (install the skill).
+
+**If `PY_OLD` or `PY_MISSING`:** use `AskUserQuestion`:
+
+> Q: "MESH needs Python 3.10 or newer. Detected: `<PY_OLD $PYV | no python3 found>`. How do you want to proceed?"
+> Options:
+>   1. **"Auto-install via uv (recommended; ~5s, no sudo, all platforms)"** - I run a one-liner from astral.sh that fetches uv, then `uv python install 3.11` for a project-scoped Python. Your system Python is not touched.
+>   2. **"I'll install Python myself, exit and re-run this prompt"** - You install Python 3.10+ via brew / apt / python.org, then re-paste this prompt.
+>   3. **"You decide"** - Defaults to option 1.
+
+If they pick option 2, print:
+
+> "OK. Install Python 3.10+ via the method you prefer:
+>     mac:    brew install python@3.11    (https://brew.sh)
+>     linux:  sudo apt install -y python3.11    (Debian/Ubuntu) or your distro's equivalent
+>     other:  https://www.python.org/downloads/
+>
+> Re-paste this prompt once you have python3 --version reporting 3.10 or newer."
+
+Then stop the prompt.
+
+If they pick option 1 (or "You decide"), show the exact command before running it:
+
+```bash
+# Show the exact command first; do not run silently.
+echo "Will run, in order:"
+echo "  1. curl -LsSf https://astral.sh/uv/install.sh | sh   # installs uv to ~/.local/bin"
+echo "  2. uv python install 3.11                            # downloads a project-scoped Python"
+```
+
+Then ask one more confirmation via `AskUserQuestion`:
+> Q: "Run the two commands above?"
+> Options: "Yes, run them" / "Cancel" / "You decide" (defaults to Yes)
+
+On Cancel, stop with: `"OK, exiting. Re-run this prompt once Python 3.10+ is available."`
+
+On Yes, run the install:
 
 ```bash
 set -e
-python3 -c "import sys; assert sys.version_info >= (3, 11), f'MESH needs Python 3.11+, found {sys.version.split()[0]}'" || {
-  echo "Install Python 3.11 or newer first. brew install python@3.11 (mac) or apt install python3.11 (linux)."
-  exit 1
-}
+# Install uv if not already present.
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # uv installs to ~/.local/bin which may not be on PATH yet.
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+# Verify uv is now callable.
+uv --version
+# Download a project-scoped Python 3.11.
+uv python install 3.11
+```
+
+After this completes, set a marker so step 1d knows to use uv-managed Python:
+
+```bash
+USE_UV=1
+```
+
+(If `python3` was already 3.10+, `USE_UV` stays unset and step 1d uses the system `python3`.)
+
+### 1c. Confirm we have a usable Python
+
+By the time control reaches here, EITHER `python3 --version` reports 3.10+ (PY_OK path), OR uv is installed and `uv python install 3.11` succeeded (`USE_UV=1`). Tell the user one of:
+- `"Using your existing Python: $(python3 -V)."`
+- `"Using uv-managed Python 3.11 (your system Python is not modified)."`
+
+### 1d. Install the skill (idempotent)
+
+```bash
+set -e
 mkdir -p ~/.claude/skills
 cd ~/.claude/skills
 if [ ! -e mesh-skills ]; then
   git clone https://github.com/sidpan1/mesh-skills.git
 fi
 cd mesh-skills
+
+# Create the venv. If we used uv to fetch Python, create the venv with uv;
+# otherwise use the system python3 -m venv.
 if [ ! -d .venv ]; then
-  python3 -m venv .venv
+  if [ "${USE_UV:-0}" = "1" ]; then
+    uv venv --python 3.11 .venv
+  else
+    python3 -m venv .venv
+  fi
 fi
+
 .venv/bin/pip install -e . >/dev/null
 ln -snf "$PWD/skills/mesh_trajectory" ~/.claude/skills/mesh-trajectory
 echo "[1/4] MESH skill installed at ~/.claude/skills/mesh-trajectory"
 ```
 
-If any line fails, surface the exact error to the user and stop. Common case: `python3` resolves to 3.10 or older; tell them to install 3.11.
+If any line fails, surface the exact error to the user and stop.
 
 After success, tell the user: **"[1/4] Skill installed."**
 
