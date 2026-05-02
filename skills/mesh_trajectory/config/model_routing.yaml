@@ -1,0 +1,18 @@
+# MESH model routing per pipeline layer.
+# Single source of truth. SKILL.md reads this file at runtime via
+# scripts/model_routing.py. Changing a value here changes the next sync.
+#
+# Allowed values: haiku, sonnet, opus. The Agent tool resolves these
+# aliases to the latest model version of that family.
+#
+# Decision rationale lives in spec.md D14. To change a routing:
+#   1. Edit this file.
+#   2. Update tests/test_model_routing.py.
+#   3. Update spec.md D14.
+# All three in one commit.
+
+layer1:  haiku   # per-session digest (Layer 1): one-sentence INITIATIVE compression
+layer2:  sonnet  # per-project summary (Layer 2): 80-120 word INITIATIVE paragraph
+layer3:  opus    # 4-section synthesis (Layer 3): final body, matching surface
+lint:    opus    # privacy LLM-as-judge: catches subtle disclosures Haiku/Sonnet miss
+compose: opus    # founder-side matcher: composes dinner tables (Guide x Explorer detection)
