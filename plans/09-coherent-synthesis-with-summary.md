@@ -1,4 +1,6 @@
-# Plan 08: Coherent synthesis layer + Summary section (schema v3)
+# Plan 09: Coherent synthesis layer + Summary section (schema v3)
+
+> **Renumbering note (2026-05-02):** This plan was authored as plan 08 (commit `391b037`). Concurrently, another Claude session shipped a `/mesh-trajectory report-issue` action that was originally also numbered 07 / 08; that plan now lives at `plans/08-report-issue-action.md`. To preserve the unique-and-sequential numbering convention, this plan was renumbered from 08 to 09. References inside this plan body to "plan 09" (the future follow-on) have been updated to "plan 10" accordingly. The git commit message on `391b037` still references "plan 08" - that's historical and unchanged.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Before starting**, read in this order:
 > 1. `CLAUDE.md` (Hard Constraint #3: privacy enforced by code; #5 build only what's in this plan).
@@ -75,7 +77,7 @@ The intermediate body is throw-away scratch held in /tmp. Only the final body (t
 - All 5 privacy-gate-stage rules (a 4th stage is added for the intermediate, not a removal).
 - Founder-side `compose.md` JSON output contract (input shape gains Summary; output `{table_id, members[], why_this_table}` unchanged).
 - Hard Constraint #1 (Claude is the AI layer): L4 is Claude.
-- Plan 07 routing config + loader. Plan 08 only ADDS `layer4: opus` to the YAML.
+- Plan 07 routing config + loader. Plan 09 only ADDS `layer4: opus` to the YAML.
 
 ## Hard constraints (carry-overs)
 
@@ -114,7 +116,7 @@ The intermediate body is throw-away scratch held in /tmp. Only the final body (t
   TOTAL_INTERMEDIATE_WORD_CAP = 600
   ```
 - **Migration cutoff for v2 → v3.** `MIGRATION_CUTOFF_DATE_V3 = date(2026, 7, 1)`. v2 accepted alongside v3 until that date. Plan 05's `MIGRATION_CUTOFF_DATE = date(2026, 6, 1)` (v1 → v2) stays exactly as-is; this plan adds a SECOND cutoff for the v2 → v3 transition. Rename the existing constant to `MIGRATION_CUTOFF_DATE_V2` for clarity (and add a backward-compat alias).
-- **`ACCEPTED_SCHEMA_VERSIONS` becomes `{2, 3}`.** v1 was removed by the date the v2 migration cutoff passed. (If the v2 cutoff has not yet passed when this plan ships, leave v1 in `ACCEPTED_SCHEMA_VERSIONS = {1, 2, 3}` — but check current date and act accordingly. As of plan 08 authoring (2026-05-02), v1 is still accepted via plan 05's V3 rule until 2026-06-01.)
+- **`ACCEPTED_SCHEMA_VERSIONS` becomes `{2, 3}`.** v1 was removed by the date the v2 migration cutoff passed. (If the v2 cutoff has not yet passed when this plan ships, leave v1 in `ACCEPTED_SCHEMA_VERSIONS = {1, 2, 3}` - but check current date and act accordingly. As of plan 09 authoring (2026-05-02), v1 is still accepted via plan 05's V3 rule until 2026-06-01.)
 - **Validator V3 rule** (the version gate, not to be confused with schema_version 3) extends to dispatch v1 / v2 / v3 each against its own per-version cutoff:
   - v1 accepted until `MIGRATION_CUTOFF_DATE_V2` (2026-06-01); after that, refused.
   - v2 accepted until `MIGRATION_CUTOFF_DATE_V3` (2026-07-01); after that, refused.
@@ -293,7 +295,7 @@ def test_migration_cutoff_v3_is_2026_07_01():
 
 
 def test_accepted_schema_versions_includes_v1_v2_v3_pre_v2_cutoff():
-    # As of plan 08 authoring (2026-05-02), v1 still accepted until 2026-06-01.
+    # As of plan 09 authoring (2026-05-02), v1 still accepted until 2026-06-01.
     # After 2026-06-01, the validator's V3 rule refuses v1; ACCEPTED_SCHEMA_VERSIONS
     # itself stays as the static value space.
     assert ACCEPTED_SCHEMA_VERSIONS == frozenset({1, 2, 3})
@@ -330,7 +332,7 @@ SCHEMA_VERSION = 3
 # migration cutoff in validate.py V3.
 ACCEPTED_SCHEMA_VERSIONS = frozenset({1, 2, 3})
 MIGRATION_CUTOFF_DATE_V2 = date(2026, 6, 1)   # v1 -> v2 (set by plan 05)
-MIGRATION_CUTOFF_DATE_V3 = date(2026, 7, 1)   # v2 -> v3 (set by plan 08)
+MIGRATION_CUTOFF_DATE_V3 = date(2026, 7, 1)   # v2 -> v3 (set by plan 09)
 
 # Backward-compat alias for code written against plan 05's single cutoff.
 MIGRATION_CUTOFF_DATE = MIGRATION_CUTOFF_DATE_V2
@@ -1519,7 +1521,7 @@ ls /tmp/mesh_* 2>&1
 | **Summary cap = 50 words** | A 50-word elevator pitch fits one screen and gives the matcher one high-signal compressed claim per user. | If founder dogfood (Task 11) shows Summary cannot meaningfully condense the trajectory in 50 words, bump to 60 or 75 (re-run Task 1 + 3 + 10). |
 | **Total v3 cap = 350 words** | 40% larger than v2 (250). Hits the user-stated target without ballooning per-section review cost. | If users report the extra section makes review meaningfully heavier without quality lift, drop Summary or hold at 250 with denser content. |
 | **Intermediate caps doubled** (100/150/200/150) | Doubled gives L4 rich source material; L4 still has a hard 350-word ceiling for output, so L3 generosity does not bloat the final. | If L4 consistently fails to compress and trips V7 across multiple users, drop intermediate caps to 1.5x v2 caps (75/115/150/115). |
-| **Coherence regenerate scope** | "Regenerate" in step 17 re-runs the entire L4 layer (all 5 sections), not one section. | If users want surgical per-section regen (like v2 had), add a per-section L4 prompt variant in plan 09. The cost is breaking coherence the layer is designed to produce. |
+| **Coherence regenerate scope** | "Regenerate" in step 17 re-runs the entire L4 layer (all 5 sections), not one section. | If users want surgical per-section regen (like v2 had), add a per-section L4 prompt variant in plan 10. The cost is breaking coherence the layer is designed to produce. |
 | **Migration cutoff (v2 -> v3)** | 2026-07-01 (one month after the v1 -> v2 cutoff). | If launch attendee re-sync rate is low post-launch, push the cutoff out (editable in `schema.py`). |
 | **Layer 4 model** | `opus` (matching surface). | If Sonnet produces comparable coherence + Summary on dogfood + matching quality, drop layer4 to sonnet via a one-line yaml edit + test update (plan 07's three-way commit pattern). |
 
@@ -1554,5 +1556,5 @@ This plan is ready to execute in a fresh Claude Code conversation.
 3. Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` (inline). Tasks 1-10 are codable; Task 11 is the founder dogfood and is manual.
 4. Dispatch order matters: Task 1 (schema) before Tasks 2 + 3 (validator). Task 4 (L3 prompts) and Task 5 (L4 prompt) are independent. Task 6 (SKILL.md) reads naturally after Tasks 4 + 5. Task 7 depends on plan 07's existence. Tasks 8 + 9 (orchestrator) can run any time after Task 1. Task 10 (spec) any time. Task 11 last.
 5. Each task ends with one commit; do not batch commits across tasks.
-6. After Task 11, append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, dogfood metrics + quality assessment vs the v2 baseline, and open items handed off to plan 09.
-7. Then ask the user whether to author plan 09 now (likely scope: per-section L4 regenerate, scheduled weekly sync via `/schedule`, Summary-only `sync --section "Summary"` for in-week trajectory updates).
+6. After Task 11, append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, dogfood metrics + quality assessment vs the v2 baseline, and open items handed off to plan 10.
+7. Then ask the user whether to author plan 10 now (likely scope: per-section L4 regenerate, scheduled weekly sync via `/schedule`, Summary-only `sync --section "Summary"` for in-week trajectory updates).
