@@ -109,6 +109,34 @@ We work iteration by iteration. Each iteration has its own plan file under `plan
 - **Author the next plan only after the current one's execution log is written.** The next plan should reference what didn't work in the previous one and what's being deferred.
 - **Implement in new session** Ask the user if they want a summary line that they can copy and paste in a new session to get started on the plan after creating the plan.
 
+### Serial plan numbering (avoid collisions across concurrent sessions)
+
+Plan numbers MUST be unique and sequential. Two Claude sessions both authoring "plan NN" at the same time produces a numbering collision that requires a renumber-and-renote operation to resolve. To prevent this:
+
+1. **Pick the next number atomically.** Before authoring a new plan, run `ls plans/ | tail -3` AND `git log --oneline -10 -- plans/` (the second catches plans authored on `main` that may not yet be local). The next plan number is `max(seen) + 1`. If you see two highest-numbered plans with the same number (collision in flight from another session), STOP and resolve before authoring more.
+
+2. **Commit the plan-author commit immediately.** As soon as `plans/NN-<name>.md` is written, `git add plans/NN-<name>.md && git commit -m "docs(plan-NN): ..."`. Do NOT batch the plan-author commit with later implementation work. The standalone commit serves as the lock: a concurrent session running `git log` will see `plan NN` is taken before it starts authoring.
+
+3. **Pull before you author when running on `main`.** If your session has been idle and the working tree is on `main`, run `git pull --rebase` (or check `git log --oneline origin/main..HEAD` and `git log --oneline HEAD..origin/main`) before picking the next number. A remote session may have shipped plans you have not yet pulled.
+
+### Resolving duplicate-numbered plans (when collision already happened)
+
+If two plans landed with the same number (typically because two sessions authored them within minutes of each other on `main`), resolve like this:
+
+1. **Identify which plan was authored first by commit timestamp.** Run `git log --oneline -- plans/NN-*.md` for the colliding number; the older author commit "wins" the lower number.
+
+2. **Renumber the loser** to the next available number:
+   - `git mv plans/NN-<loser>.md plans/MM-<loser>.md` where `MM` is the next free integer after the highest existing plan number.
+   - Edit the renumbered plan body: update the title (`# Plan NN:` -> `# Plan MM:`), update every in-body reference to "plan NN" -> "plan MM" where it refers to this plan, and update forward-pointing references (e.g. "open items handed off to plan NN+1") -> "plan MM+1".
+   - Add a renumbering note at the top of the plan body, immediately after the title:
+     > **Renumbering note (YYYY-MM-DD):** This plan was authored as plan NN (commit `<sha>`). Concurrently, another session shipped a different plan NN at `plans/NN-<winner>.md`. Renumbered from NN to MM to preserve unique-and-sequential numbering. The git commit message on `<sha>` still references "plan NN" - that's historical and unchanged.
+
+3. **Commit the rename + body edits as one chore commit:** `git commit -m "chore(plans): renumber <loser> plan from NN to MM"`. Do NOT amend the original plan-author commit; preserve its history.
+
+4. **Update any execution-handoff references in OTHER plans** that pointed to the renumbered plan (typically the previous plan's "open items handed off to plan NN" or its EXECUTION LOG). Edit those to point at MM.
+
+5. **Carry on.** Both plans now live under unique numbers. Implementation continues against the renumbered plan as if MM had been its original number.
+
 ## Code layout (planned, see plans/01-v0-tdd-build.md File Structure for the full tree)
 
 - `skills/mesh_trajectory/` (underscore for Python import; dashed name `mesh-trajectory` is a symlink for Claude Code skill discovery)
