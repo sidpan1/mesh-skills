@@ -29,14 +29,26 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
 ## /mesh-onboard flow
 
 1. Greet the user. Confirm they have read `spec.md` privacy section.
-2. Ask the user, one at a time:
-   - Full name
-   - Primary email
-   - LinkedIn URL
-   - Role (free-text)
-   - City (must be Bengaluru in V0; warn and abort if not)
-   - Available Saturdays for the next 4 weeks (default to all)
-   - Optional: emails of people they should NOT be matched with (`do_not_match`)
+2. Collect profile fields. Use `AskUserQuestion` ONCE PER FIELD, in this order. Every call's option list ends with "You decide" per global CLAUDE.md item 16; the user may also pick the auto-supplied "Other" for free-text override.
+
+   a. **Full name** - Q: "What name should appear on your `users/<email>.md`?" Options: "Use my git config name (`$(git config user.name)`)", "Other (type your name)", "You decide" (defaults to git config name).
+
+   b. **Primary email** - Q: "Which email is the canonical one for matching and dedupe?" Options: "Use my git config email (`$(git config user.email)`)", "Other (type your email)", "You decide" (defaults to git config email). After capture, validate it looks like an email (contains `@` and `.`); re-ask if not.
+
+   c. **LinkedIn URL** - Q: "Your LinkedIn URL (used by other attendees to look you up before dinner)." Options: "Skip (I don't have one / don't want to share)", "Other (paste URL)", "You decide" (defaults to Skip).
+
+   d. **Role (free-text)** - Q: "Your current role in one short line (e.g. 'Director of Eng at Astuto, ex-Google')." Options: "Other (type your role)", "You decide" (you decide => stop and ask the user, role is required).
+
+   e. **City** - Q: "Which city are you based in for dinners?" Options: "Bengaluru", "Other (not Bengaluru)", "You decide" (defaults to Bengaluru). If they pick "Other", warn: "MESH V0 only runs in Bengaluru. We will save your file but you will not be matched until V0.1." then abort cleanly.
+
+   f. **Available Saturdays for the next 4 weeks** - compute the next 4 Saturday dates (`YYYY-MM-DD`) from today. Q: "Which of these Saturdays are you available for dinner? Pick all that apply." Options: each of the 4 dates as a separate option, plus "All four", plus "None of these (skip me until I update)", plus "You decide" (defaults to All four). Multi-select. If "None", warn and confirm before saving.
+
+   g. **do_not_match** - Q: "Anyone you specifically should NOT be seated with? (Comma-separated emails. Useful for spouses, co-founders, conflict-of-interest.)" Options: "None (default)", "Other (paste comma-separated emails)", "You decide" (defaults to None).
+
+   After all 7 fields are collected, echo a one-screen recap to the user with `AskUserQuestion`:
+   > Q: "Look right? You can edit any field before we continue."
+   > Options: "Looks right, continue" / "Edit a field" / "You decide" (defaults to continue).
+   > On "Edit a field", ask which field, re-run the relevant sub-prompt, loop.
 3. Ask the user for the mesh-data repo URL (default: `https://github.com/sidpan1/mesh-data`).
 4. **Pre-flight access check.** Run `git ls-remote --exit-code <repo_url> HEAD`. If it fails, stop and tell the user: "Your local git can't read mesh-data. Ping the founder to get added, then run `/mesh-trajectory onboard` again. Verify your GitHub auth with `gh auth status`."
 5. **Extract per-session corpora + manifest (single pass).** Run:
