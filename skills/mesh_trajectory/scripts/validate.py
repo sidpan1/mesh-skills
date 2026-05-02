@@ -12,8 +12,11 @@ from pathlib import Path
 import yaml
 from skills.mesh_trajectory.schema import (
     SCHEMA_FIELDS, REQUIRED_FIELDS, SCHEMA_VERSION,
-    ACCEPTED_SCHEMA_VERSIONS, MIGRATION_CUTOFF_DATE,
+    ACCEPTED_SCHEMA_VERSIONS,
+    MIGRATION_CUTOFF_DATE_V2, MIGRATION_CUTOFF_DATE_V3,
     SECTION_FIELDS, SECTION_WORD_CAPS, TOTAL_BODY_WORD_CAP,
+    SECTION_FIELDS_BY_VERSION, SECTION_WORD_CAPS_BY_VERSION,
+    TOTAL_BODY_WORD_CAP_BY_VERSION,
 )
 
 V0_ALLOWED_CITIES = frozenset({"Bengaluru"})
@@ -103,16 +106,21 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
     if missing:
         raise ValidationError(f"missing required field(s): {sorted(missing)}")
 
-    # V3: schema_version gate with migration window
+    # V3: schema_version gate with per-version migration windows.
     sv = frontmatter["schema_version"]
     if sv not in ACCEPTED_SCHEMA_VERSIONS:
         raise ValidationError(
             f"schema_version must be one of {sorted(ACCEPTED_SCHEMA_VERSIONS)}, got {sv}"
         )
-    if sv == 1 and today >= MIGRATION_CUTOFF_DATE:
+    if sv == 1 and today >= MIGRATION_CUTOFF_DATE_V2:
         raise ValidationError(
-            f"schema_version 1 not accepted after {MIGRATION_CUTOFF_DATE.isoformat()}; "
-            f"re-run /mesh-trajectory sync to migrate to schema_version 2"
+            f"schema_version 1 not accepted after {MIGRATION_CUTOFF_DATE_V2.isoformat()}; "
+            f"re-run /mesh-trajectory sync to migrate to schema_version {SCHEMA_VERSION}"
+        )
+    if sv == 2 and today >= MIGRATION_CUTOFF_DATE_V3:
+        raise ValidationError(
+            f"schema_version 2 not accepted after {MIGRATION_CUTOFF_DATE_V3.isoformat()}; "
+            f"re-run /mesh-trajectory sync to migrate to schema_version {SCHEMA_VERSION}"
         )
 
     # city

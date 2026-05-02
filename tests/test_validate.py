@@ -295,3 +295,49 @@ def test_per_user_override_extends_stoplist(tmp_path, monkeypatch):
     body = _v2_body(**{"Top of mind": "main thrust this month is project helios"})
     with pytest.raises(ValidationError, match=r"PII.*stoplist.*project helios"):
         validate_payload(VALID_V2, body, today=date(2026, 5, 1))
+
+
+# --- V3 multi-version cutoffs (plan 09) ---
+
+VALID_V3_FRONTMATTER = VALID_V2 | {"schema_version": 3}
+
+
+def _v3_body(**overrides) -> str:
+    """Build a v3 body from sections (5 sections including Summary)."""
+    sections = {
+        "Summary": "fintech engineer on agent platforms with backend roots",
+        "Work context": "founding engineer at a small fintech owning agent orchestration",
+        "Top of mind": "migrating an in house agent harness onto a unified runtime this quarter",
+        "Recent months": "shipped a new version of the underwriting agent stack and an offline eval harness",
+        "Long-term background": "several years backend systems plus prior ranking infrastructure work",
+    }
+    sections.update(overrides)
+    parts = []
+    for name in ("Summary", "Work context", "Top of mind", "Recent months", "Long-term background"):
+        parts.append(f"## {name}\n\n{sections[name]}")
+    return "\n\n".join(parts)
+
+
+def test_v3_passes_during_window():
+    try:
+        validate_payload(VALID_V3_FRONTMATTER, _v3_body(), today=date(2026, 5, 1))
+    except ValidationError as e:
+        assert "schema_version" not in str(e), f"V3 should pass v3: {e}"
+
+
+def test_v2_passes_pre_v3_cutoff():
+    try:
+        validate_payload(VALID_V2, body=_v2_body(), today=date(2026, 6, 30))
+    except ValidationError as e:
+        assert "schema_version" not in str(e), f"V3 should accept v2 pre-2026-07-01: {e}"
+
+
+def test_v2_refused_after_v3_cutoff():
+    with pytest.raises(ValidationError, match=r"schema_version.*2.*after.*2026-07-01"):
+        validate_payload(VALID_V2, body=_v2_body(), today=date(2026, 7, 1))
+
+
+def test_v1_refused_after_v2_cutoff_unchanged():
+    # Plan 05's rule preserved: v1 refused after 2026-06-01.
+    with pytest.raises(ValidationError, match=r"schema_version.*1.*after.*2026-06-01"):
+        validate_payload(VALID_V1, body=LEGACY_BODY, today=date(2026, 6, 1))
