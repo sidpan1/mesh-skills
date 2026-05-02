@@ -665,3 +665,63 @@ This plan is ready to execute in a fresh Claude Code conversation.
 5. Each task ends with one commit; do not batch commits across tasks.
 6. After Task 7, append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, the dogfood metrics + quality assessment, and open items handed off to plan 08.
 7. Then ask the user whether to author plan 08 now (likely scope: scheduled weekly sync via the `/schedule` skill so the body stays fresh between manual runs; or per-section model overrides if Task 7 shows L3 needs heterogeneous models per section).
+
+---
+
+# EXECUTION LOG (2026-05-02)
+
+## Task status
+
+| # | Task | Status | Commit |
+|---|---|---|---|
+| 1 | Create model_routing.yaml + loader + tests | DONE | `4e375a9` |
+| 2 | SKILL.md step 6 reads layer1 | DONE | `4661d6d` |
+| 3 | SKILL.md step 9 reads layer2 | DONE | `d23a747` |
+| 4 | SKILL.md steps 13 + 15 surface configured model | DONE | `8c996e8` |
+| 5 | mesh_orchestrator/SKILL.md step 7 surfaces compose model | DONE | `1123834` |
+| 6 | spec.md D14 entry | DONE | `870ca0a` |
+| 7 | Founder dogfood verification | DEFERRED | (folded into plan 09's verification: same dogfood run will exercise both routing + the v3 coherence layer end-to-end) |
+
+Plan was authored at commit `4f54997` and executed in the same session as plan 09. 6 implementation commits + plan commit + execution log commit.
+
+## Test counts
+
+- Baseline (start of session): 103 passing (post plan 06 onboarding leniency).
+- After Task 6: **112 passing** (+9 in `test_model_routing.py`).
+
+## What worked
+
+- The TDD ordering held: tests RED before the loader existed, GREEN after the YAML + loader landed.
+- The CLI shape (`python -m skills.mesh_trajectory.scripts.model_routing layer1` -> `haiku`) is what the SKILL.md flow actually needs. The shell-capture pattern (`MODEL=$(...)`) is the natural way to wire it.
+- `ALLOWED_MODELS = frozenset({"haiku", "sonnet", "opus"})` doubles as a syntax check on the YAML; an invalid alias raises at load time, not at dispatch time. Test `test_only_known_aliases_in_config` locks that.
+- Steps 13 + 15 surface the configured model as a "if your session is not on Opus, warn" note rather than trying to enforce — correct framing because the parent's model can't be changed mid-conversation. The compose step surfaces the same way.
+
+## What didn't work first try
+
+Nothing. All 6 codable tasks landed clean on first attempt. The earlier session had already authored the plan with concrete code, so execution was largely transcription.
+
+## Hardenings beyond the original plan
+
+None. The plan's tech notes were sufficient.
+
+## Mid-flight architectural changes
+
+None.
+
+## Verification result
+
+- All 112 tests pass.
+- CLI smoke: `layer1 -> haiku`, `layer2 -> sonnet`, `layer3 -> opus`, `lint -> opus`, `compose -> opus`. Unknown layer exits 1 with a clear error.
+- `grep -c model_routing skills/mesh_trajectory/SKILL.md` -> 5 (steps 6, 9, 13, 15 + a model-mismatch warning string).
+- `grep -c model_routing skills/mesh_orchestrator/SKILL.md` -> 1.
+- D14 row present in spec.md.
+- No em-dashes anywhere.
+
+## What remains MANUAL (deferred)
+
+- **Founder dogfood sync with the new routing.** Task 7 of the plan called for re-running `/mesh-trajectory sync` against the founder corpus and comparing against the all-Opus 2026-05-02 baseline. **Folded into plan 09's verification** (Task 11) because plan 09 ships the v3 coherence layer in the same session; one dogfood run can exercise both changes end-to-end. The metrics expected (L1 token spend on Haiku vs the Opus baseline; L2 on Sonnet) will be captured in plan 09's EXECUTION LOG.
+
+## Open items handed off to plan 09 / plan 10
+
+- Plan 09 picks up immediately and adds `layer4: opus` to the routing config in its Task 7 (now trivial since the YAML exists).
+- Plan 10 candidates: scheduled weekly sync via `/schedule`; if dogfood shows L1 Haiku quality regresses meaningfully, bump L1 to Sonnet (one-row YAML edit + one test update + spec.md D14 update, in one commit per the three-way pattern).
