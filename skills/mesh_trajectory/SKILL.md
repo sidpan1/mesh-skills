@@ -22,9 +22,10 @@ The skill registers ONE slash command, `/mesh-trajectory`. Sub-flows are selecte
 | `/mesh-trajectory sync` | Re-extract sessions, regenerate trajectory, push update. |
 | `/mesh-trajectory check` | Pull mesh-data and show pending dinner invite, if any. |
 | `/mesh-trajectory status` | Show current user file + last sync time + next Saturday status. |
+| `/mesh-trajectory report-issue [optional one-line description]` | File a GitHub issue on sidpan1/mesh-skills with the current conversation's failure context. Reviewed by the user before submission. |
 | `/mesh-trajectory` (no arg, or unknown arg) | Print this invocation table and exit. |
 
-When `/mesh-trajectory` is invoked, parse the first non-empty token of the user's message after the command. Match against the actions above; on no match or no token, print the table and exit. Free-text variants ("do a sync", "run onboarding", "check my invite") map to the obvious action.
+When `/mesh-trajectory` is invoked, parse the first non-empty token of the user's message after the command. Match against the actions above; on no match or no token, print the table and exit. Free-text variants ("do a sync", "run onboarding", "check my invite", "file a bug", "report this issue", "log this in mesh-skills") map to the obvious action.
 
 ## /mesh-onboard flow
 
