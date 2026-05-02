@@ -195,6 +195,127 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
 2. Show last commit timestamp on that file.
 3. Show next Saturday from `available_saturdays` and whether an invite for that date exists.
 
+## /mesh-report-issue flow
+
+This action lets a user ask Claude (in the same Claude Code session where something just went wrong) to file a GitHub issue on `sidpan1/mesh-skills` capturing what happened, with full technical context Claude already has from the conversation, and reviewed by the user before submission. Natural-language phrasing maps here per the rule at line 27 of this file: "report this", "file a bug", "log this issue", "tell sid this is broken" all route here.
+
+The flow has 7 steps. Walk them in order. Privacy is enforced by structure (Claude only emits the named sections below; raw conversation is never dumped) plus the mandatory user-review gate at step 5.
+
+1. **Capture the user's anchor.** If the user passed a description as the action argument (e.g. `/mesh-trajectory report-issue Python install fails on M1`), use that as the lede. If they invoked with no argument or via natural-language ("file an issue", "this is broken"), use `AskUserQuestion`:
+   > Q: "What went wrong, in one short line? (Claude will fill in technical detail.)"
+   > Options: "Other (type the symptom)", "You decide" (you decide => stop, this field is required).
+   Save the lede to `/tmp/mesh_issue_lede.txt`.
+
+2. **Mine the current conversation for technical context.** From the conversation already in your context (do NOT read session files on disk; that violates hard constraint #4), extract:
+   - **Error messages / tracebacks** - full text of any error block the user saw.
+   - **Failed commands** - bash commands the user ran whose exit code or output indicated failure.
+   - **Files touched + line numbers** - any `file:line` references that came up.
+   - **Environment** - run these locally and capture output:
+     ```bash
+     uname -srm
+     python3 --version 2>/dev/null || echo "(no python3)"
+     gh --version 2>/dev/null | head -1 || echo "(no gh)"
+     gh auth status 2>&1 | head -3 || echo "(gh not authenticated)"
+     test -d ~/.claude/skills/mesh-skills && (cd ~/.claude/skills/mesh-skills && git rev-parse --short HEAD 2>/dev/null) || echo "(mesh-skills not installed)"
+     ```
+   Stage these signals in your working memory; do NOT write raw conversation text to disk.
+
+3. **Auth precheck.** Run:
+   ```bash
+   command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && echo "GH_OK" || echo "GH_NOT_READY"
+   ```
+   If `GH_NOT_READY`, stop and tell the user:
+   > "I need the GitHub CLI (`gh`) to file the issue.
+   >
+   >     mac:    brew install gh && gh auth login
+   >     linux:  see https://cli.github.com
+   >
+   > Then re-run `/mesh-trajectory report-issue` (your description will need to be re-typed)."
+
+   If `GH_OK`, capture the user's handle:
+   ```bash
+   HANDLE=$(gh api user --jq .login)
+   echo "Filing as @$HANDLE"
+   ```
+
+4. **Compose the issue draft.** Write the full issue body to `/tmp/mesh_issue.md` using exactly this template (substitute the values from steps 1, 2, 3):
+
+   ````markdown
+   ## What happened
+
+   <one to three sentences framing the user's lede with Claude's reading of the symptom; do NOT paraphrase the user out of recognizability>
+
+   ## Steps to reproduce
+
+   1. <step Claude observed>
+   2. <step Claude observed>
+   ...
+
+   ## Expected vs actual
+
+   - **Expected:** <one line>
+   - **Actual:** <one line>
+
+   ## Environment
+
+   - **OS:** <output of `uname -srm`>
+   - **Python:** <output of `python3 --version`>
+   - **gh:** <output of `gh --version` first line + auth status one-liner>
+   - **mesh-skills SHA:** <output of `git rev-parse --short HEAD` from ~/.claude/skills/mesh-skills, or "(mesh-skills not installed)">
+
+   ## Relevant errors
+
+   ```
+   <verbatim error blocks from step 2; ONE block, no commentary, no code unrelated to the failure>
+   ```
+
+   ---
+   Filed by `/mesh-trajectory report-issue` from @<HANDLE>'s session.
+   ````
+
+   Compose the title separately. The title is short (under 60 characters), starts with the strongest noun phrase from the lede, and avoids vague verbs ("broken", "doesn't work"). Examples of good titles: "Python install fails on Apple Silicon when brew is absent", "validate.py V8 false-positive on @company.com email". Save to `/tmp/mesh_issue_title.txt`.
+
+5. **PRIVACY REVIEW GATE (mandatory).** `mesh-skills` is a public repo. Anything in this issue is world-readable forever once submitted. Show the full draft to the user as a fenced code block. Then use `AskUserQuestion`:
+   > Q: "Submit this issue to sidpan1/mesh-skills? (Public repo - anyone on the internet will be able to read it.)"
+   > Options:
+   >   1. **"Submit as-is"**
+   >   2. **"Edit (paste replacement body)"** - user provides replacement; you write to /tmp/mesh_issue.md and loop back to step 5
+   >   3. **"Edit title only (paste replacement title)"** - user provides replacement title; you write to /tmp/mesh_issue_title.txt and loop back to step 5
+   >   4. **"Cancel (delete and don't submit)"**
+   >   5. **"You decide"** - defaults to option 2 (edit), since the user is the only one who knows whether the body has internal codenames, project names, or other sensitive content the structured template would not catch.
+
+   On Cancel, run:
+   ```bash
+   rm -f /tmp/mesh_issue.md /tmp/mesh_issue_title.txt /tmp/mesh_issue_lede.txt
+   echo "Cancelled. No issue filed."
+   ```
+   Then stop the flow.
+
+6. **Submit via gh.** Run:
+   ```bash
+   ISSUE_URL=$(gh issue create \
+     -R sidpan1/mesh-skills \
+     --title "$(cat /tmp/mesh_issue_title.txt)" \
+     --body-file /tmp/mesh_issue.md \
+     --label user-report)
+   echo "$ISSUE_URL"
+   ```
+   If the `gh issue create` call fails (common cause: the `user-report` label doesn't exist yet on the repo), retry once without the `--label` flag and tell the user "Filed without label - founder may need to add the `user-report` label manually for triage."
+   ```bash
+   ISSUE_URL=$(gh issue create \
+     -R sidpan1/mesh-skills \
+     --title "$(cat /tmp/mesh_issue_title.txt)" \
+     --body-file /tmp/mesh_issue.md)
+   echo "$ISSUE_URL"
+   ```
+
+7. **Cleanup + tell the user.** Run:
+   ```bash
+   rm -f /tmp/mesh_issue.md /tmp/mesh_issue_title.txt /tmp/mesh_issue_lede.txt
+   ```
+   Then tell the user:
+   > "Filed: <ISSUE_URL>. The founder is notified by GitHub. You can subscribe to the issue for updates from there."
+
 ## Privacy contract
 
 - Three intermediate artifact stages ever live on disk, each gated by an immediate-delete step:
