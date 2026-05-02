@@ -62,6 +62,15 @@ When `/mesh-trajectory` is invoked, parse the first non-empty token of the user'
 
    **Sparse-corpus guard:** if `COUNT` is 0, abort: tell the user "MESH reads your last 4 weeks of Claude Code session history; you have none. Use Claude Code on a real project for at least a week, then re-run." Delete `/tmp/mesh_sess` and stop. If `COUNT` is 1 to 4, use AskUserQuestion: "Only $COUNT sessions in the last 4 weeks. The trajectory will be short. Proceed, or stop and try later?" with options Proceed / Stop. If `COUNT >= 5`, continue without prompting.
 6. **Per-session digests.** For each entry in `/tmp/mesh_sess/manifest.json`, read the corpus file at `entry.corpus_path`, apply `prompts/per_session.md` (substitute `{{session_corpus}}`), and produce one digest sentence. Append all digests to `/tmp/mesh_digests.txt`, ordered most-recent-first. Each line is `<session_id> <YYYY-MM-DD> <digest>`. Use parallel subagents when there are >50 sessions; instruct each subagent to read manifest entries by index range and write a batch file (e.g. `/tmp/mesh_digests_batch_NN.txt`), then concatenate them into `/tmp/mesh_digests.txt`.
+
+   **Model:** Resolve the per-layer model BEFORE dispatching subagents, then pass it as the Agent tool's `model` parameter (one shell call, used for every subagent in this layer):
+
+   ```bash
+   LAYER1_MODEL=$(~/.claude/skills/mesh-skills/.venv/bin/python -m skills.mesh_trajectory.scripts.model_routing layer1)
+   echo "Layer 1 (digest) model: $LAYER1_MODEL"
+   ```
+
+   Then in each Agent dispatch for this step, set `model: "$LAYER1_MODEL"` (the captured value, e.g. `haiku`). Do NOT hardcode the model in the SKILL.md or in subagent prompts; always resolve via the routing config so that a future config edit takes effect on the next sync without touching SKILL.md.
 7. **Privacy gate (corpora).** Delete the per-session corpus files now. The manifest stays - it carries metadata only (no corpus content).
    ```bash
    find /tmp/mesh_sess -name '[0-9]*_*.txt' -delete
