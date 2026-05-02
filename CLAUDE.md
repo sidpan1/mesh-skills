@@ -107,6 +107,7 @@ We work iteration by iteration. Each iteration has its own plan file under `plan
 - **Each plan is self-contained.** It must brief a fresh Claude that has never seen prior conversations. Reference earlier plans by filename when needed; do not assume the reader has the context.
 - **Append, don't rewrite.** EXECUTION LOG is the only structured way to record what happened. Never edit a plan's body after execution starts.
 - **Author the next plan only after the current one's execution log is written.** The next plan should reference what didn't work in the previous one and what's being deferred.
+- **Implement in new session** Ask the user if they want a summary line that they can copy and paste in a new session to get started on the plan after creating the plan.
 
 ## Code layout (planned, see plans/01-v0-tdd-build.md File Structure for the full tree)
 
@@ -118,7 +119,17 @@ We work iteration by iteration. Each iteration has its own plan file under `plan
 
 ## Naming convention (important)
 
-Python packages use **underscores**: `skills/mesh_trajectory/`, `skills/mesh_orchestrator/`. Claude Code skill discovery expects **dashes**: `mesh-trajectory`, `mesh-orchestrator`. Bridge with a symlink inside `skills/`: `ln -s mesh_trajectory mesh-trajectory`. Always import via the underscore path; always reference the skill via the dashed name in `SKILL.md` frontmatter and in user-facing slash commands.
+Python packages use **underscores** so they are valid module identifiers: `skills/mesh_trajectory/`, `skills/mesh_orchestrator/`. Always import via the underscore path (`from skills.mesh_trajectory.scripts.validate import ...`).
+
+Claude Code skill discovery expects **dashes** in the directory name under `~/.claude/skills/`. The bridge happens at install time, NOT in this repo. The install command in `ONBOARD.md` step 1 runs:
+
+```bash
+ln -snf "$PWD/skills/mesh_trajectory" ~/.claude/skills/mesh-trajectory
+```
+
+That symlink (on the user's machine, outside the repo) is what Claude Code reads. Inside the repo, only the underscore directories exist. There used to be in-repo dash symlinks (`skills/mesh-trajectory -> mesh_trajectory`); plan 06 deleted them as dead weight (no code referenced them).
+
+Always reference the skill via its dashed name (`mesh-trajectory`, `mesh-orchestrator`) in `SKILL.md` frontmatter and in user-facing slash commands.
 
 ## Commands
 
