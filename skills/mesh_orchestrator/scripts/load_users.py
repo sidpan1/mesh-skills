@@ -29,12 +29,29 @@ class User:
 
 
 def _build_sections(schema_version: int, body: str) -> dict[str, str]:
-    """Return an ordered {section_name: text} dict over SECTION_FIELDS."""
-    if schema_version == 2:
+    """Return an ordered {section_name: text} dict over SECTION_FIELDS (v3).
+
+    For v3 files, parse all 5 sections from the body.
+    For v2 files, parse the 4 v2 sections and add Summary="" so the dict
+    matches the v3 SECTION_FIELDS shape that the matcher expects.
+    For v1 files, dump the entire body into Recent months and leave Summary,
+    Work context, Top of mind, Long-term background empty.
+    """
+    if schema_version == 3:
         parsed = parse_sections(body)
         return {name: parsed.get(name, "") for name in SECTION_FIELDS}
-    # v1: dump full body into Recent months; other three empty.
+    if schema_version == 2:
+        parsed = parse_sections(body)
+        out: dict[str, str] = {}
+        for name in SECTION_FIELDS:
+            if name == "Summary":
+                out[name] = ""
+            else:
+                out[name] = parsed.get(name, "")
+        return out
+    # v1 fallback: full body into Recent months.
     return {
+        "Summary": "",
         "Work context": "",
         "Top of mind": "",
         "Recent months": body,

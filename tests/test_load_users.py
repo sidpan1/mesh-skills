@@ -84,12 +84,40 @@ def test_v1_user_has_only_recent_months_populated(tmp_path):
     assert len(users) == 1
     u = users[0]
     assert set(u.sections.keys()) == set(SECTION_FIELDS)
+    assert u.sections.get("Summary", "") == ""
     assert u.sections["Work context"] == ""
     assert u.sections["Top of mind"] == ""
     assert u.sections["Long-term background"] == ""
     assert "schema_version 1" in u.sections["Recent months"].lower()
     # Legacy body field still populated for any caller that looks at it.
     assert u.body == u.sections["Recent months"]
+
+
+# --- v3 + v2 adapter (plan 09 Task 8) ---
+
+def test_v3_user_exposes_all_5_sections(tmp_path):
+    (tmp_path / "users").mkdir()
+    (tmp_path / "users" / "asha_at_example_com.md").write_text(
+        (FIXTURES / "user_v3_valid.md").read_text()
+    )
+    users = load_users_for_date(tmp_path, "2026-05-09")
+    assert len(users) == 1
+    u = users[0]
+    assert set(u.sections.keys()) == set(SECTION_FIELDS)
+    assert "fintech" in u.sections["Summary"].lower()
+    assert "founding engineer" in u.sections["Work context"].lower()
+
+
+def test_v2_user_gets_empty_summary_in_adapter(tmp_path):
+    (tmp_path / "users").mkdir()
+    (tmp_path / "users" / "v2_at_example_com.md").write_text(
+        (FIXTURES / "user_v2_valid.md").read_text()
+    )
+    users = load_users_for_date(tmp_path, "2026-05-09")
+    assert len(users) == 1
+    u = users[0]
+    assert u.sections["Summary"] == ""
+    assert "founding engineer" in u.sections["Work context"].lower()
 
 
 def test_user_sections_is_ordered(tmp_path):
