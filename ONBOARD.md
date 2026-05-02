@@ -12,9 +12,24 @@ You have four steps. Run them in order. Use Bash for shell commands, Read for fi
 
 In your own words:
 
-> "MESH curates a Saturday-7pm dinner for 6 builders, matched on what you are actually building (read from your local Claude Code sessions). Four steps: install the skill, verify GitHub access, check your last 4 weeks have enough material, and run the summary flow in a fresh session. Raw conversations never leave your machine. Only a 200-word summary you review goes to a shared repo. **Launch-window note: the shared repo is currently public; the founder will revert it to private after the launch event. Treat your 200-word body as world-readable when you review it.** Continue?"
+> "MESH curates a Saturday-7pm dinner for 6 builders, matched on what you are actually building (read from your local Claude Code sessions). Four steps: install the skill, verify GitHub access, check your last 4 weeks have enough material, and run the summary flow in a fresh session. Raw conversations never leave your machine. Only a 200-word summary you review goes to a shared repo."
+>
+> "**Launch-window note: the shared repo is currently public; the founder will revert it to private after the launch event. Treat your 200-word body as world-readable when you review it.**"
 
-If they decline, stop. Otherwise proceed.
+Then ask via `AskUserQuestion`:
+
+> Q: "Continue with MESH onboarding?"
+> Options:
+>   1. **"Yes, proceed"** - start step 1.
+>   2. **"Tell me more about the privacy model first"** - print the Privacy section from `spec.md` and ask again.
+>   3. **"Stop"** - exit cleanly.
+>   4. **"You decide"** - defaults to option 1.
+
+If they pick option 3, print: `"OK, no changes made. Re-paste this prompt anytime to onboard."` and stop.
+
+If they pick option 2, fetch and print the Privacy section from spec.md (search for `## Privacy`), then re-ask the same `AskUserQuestion` with options 1, 3, "You decide" (drop option 2 the second time).
+
+If they pick option 1 (or "You decide"), proceed to Step 1.
 
 ## Step 1 of 4: Install the skill
 
