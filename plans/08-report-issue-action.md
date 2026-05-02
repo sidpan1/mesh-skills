@@ -1,4 +1,6 @@
-# Plan 07: /mesh-trajectory report-issue action
+# Plan 08: /mesh-trajectory report-issue action
+
+> **Renumbering note (2026-05-02):** This plan was authored as plan 07. Discovered after authoring that another Claude session had concurrently authored `plans/07-model-routing-config.md` (commit 4f54997) at 09:35, before this plan's work began at 10:13. Renumbered to plan 08 to preserve the unique-and-sequential numbering convention. The previously-named `plans/08-coherent-synthesis-with-summary.md` (commit 391b037) was renumbered to plan 09 in the same operation. The git commit messages on `9040f37` and `e504a12` still reference "Plan 07" - that's historical and unchanged; this plan body is the source of truth going forward.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Before starting**, read in this order:
 > 1. `CLAUDE.md` (especially Hard constraints #1 "Claude is the AI layer", #4 "raw conversations never leave the user's device", #5 "Build only what's in the active plan").
