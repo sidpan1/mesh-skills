@@ -341,3 +341,76 @@ def test_v1_refused_after_v2_cutoff_unchanged():
     # Plan 05's rule preserved: v1 refused after 2026-06-01.
     with pytest.raises(ValidationError, match=r"schema_version.*1.*after.*2026-06-01"):
         validate_payload(VALID_V1, body=LEGACY_BODY, today=date(2026, 6, 1))
+
+
+# --- V4-V7 schema-version-aware dispatch (plan 09 Task 3) ---
+
+def test_v3_fixture_passes_v4():
+    fm, body = parse_markdown(FIXTURES / "user_v3_valid.md")
+    validate_payload(fm, body, today=date(2026, 5, 1))
+
+
+def test_v3_missing_summary_section_is_refused():
+    body = _v3_body()
+    body = body.replace(
+        "## Summary\n\nfintech engineer on agent platforms with backend roots\n\n",
+        "",
+    )
+    with pytest.raises(ValidationError, match="Summary"):
+        validate_payload(VALID_V3_FRONTMATTER, body, today=date(2026, 5, 1))
+
+
+def test_v3_summary_must_be_first():
+    body = (
+        "## Work context\n\nfounding engineer\n\n"
+        "## Top of mind\n\nmigrating harness\n\n"
+        "## Recent months\n\nshipped underwriting v2\n\n"
+        "## Long-term background\n\nseveral years backend\n\n"
+        "## Summary\n\nfintech engineer on agent platforms\n"
+    )
+    with pytest.raises(ValidationError, match="order"):
+        validate_payload(VALID_V3_FRONTMATTER, body, today=date(2026, 5, 1))
+
+
+def test_v3_summary_over_word_cap_is_refused():
+    long_summary = " ".join(["word"] * 51)
+    body = _v3_body(**{"Summary": long_summary})
+    with pytest.raises(ValidationError, match=r"Summary.*51.*50"):
+        validate_payload(VALID_V3_FRONTMATTER, body, today=date(2026, 5, 1))
+
+
+def test_v3_total_body_cap_consistency():
+    # V7 (total cap) is a redundant guard for v3: per-section caps sum to
+    # exactly TOTAL_BODY_WORD_CAP_BY_VERSION[3], so V6 must fire before V7
+    # can. This test asserts that consistency property; if a future schema
+    # change breaks it (per-section sum < total cap), V7 starts mattering.
+    from skills.mesh_trajectory.schema import (
+        SECTION_WORD_CAPS_BY_VERSION, TOTAL_BODY_WORD_CAP_BY_VERSION,
+    )
+    assert sum(SECTION_WORD_CAPS_BY_VERSION[3].values()) == TOTAL_BODY_WORD_CAP_BY_VERSION[3]
+
+
+def test_v3_total_body_at_exact_cap_passes():
+    sections = {
+        "Summary":              " ".join(["w"] * 50),
+        "Work context":         " ".join(["w"] * 50),
+        "Top of mind":          " ".join(["w"] * 75),
+        "Recent months":        " ".join(["w"] * 100),
+        "Long-term background": " ".join(["w"] * 75),
+    }  # total 350
+    body = _v3_body(**sections)
+    try:
+        validate_payload(VALID_V3_FRONTMATTER, body, today=date(2026, 5, 1))
+    except ValidationError as e:
+        assert "total body" not in str(e), f"V7 should pass at exact cap: {e}"
+
+
+def test_v2_body_still_passes_v4_v7_pre_cutoff():
+    fm, body = parse_markdown(FIXTURES / "user_v2_valid.md")
+    validate_payload(fm, body, today=date(2026, 5, 1))
+
+
+def test_v3_extra_h2_outside_v3_set_is_refused():
+    body = _v3_body() + "\n\n## Personal context\n\nfamily of four"
+    with pytest.raises(ValidationError, match=r"unexpected section.*Personal context"):
+        validate_payload(VALID_V3_FRONTMATTER, body, today=date(2026, 5, 1))

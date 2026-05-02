@@ -129,12 +129,13 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
             f"city must be one of {sorted(V0_ALLOWED_CITIES)} in V0, got {frontmatter['city']}"
         )
 
-    # V4: body has exactly SECTION_FIELDS H2 headings, in declared order.
-    # Skip V4 entirely for v1 payloads (they have a single-paragraph body).
-    if sv == 2:
+    # V4-V7: section structure rules dispatch on schema_version.
+    if sv in (2, 3):
         sections = parse_sections(body)
         actual = list(sections.keys())
-        expected = list(SECTION_FIELDS)
+        expected = list(SECTION_FIELDS_BY_VERSION[sv])
+        caps = SECTION_WORD_CAPS_BY_VERSION[sv]
+        total_cap = TOTAL_BODY_WORD_CAP_BY_VERSION[sv]
 
         # Typo detection: case-only mismatch suggests a rename.
         for a in actual:
@@ -144,12 +145,12 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
                         f"section heading typo: rename '{a}' to '{e}'"
                     )
 
-        # V5: extras (H2 headings outside SECTION_FIELDS)
+        # V5: extras (H2 headings outside SECTION_FIELDS_BY_VERSION[sv])
         unexpected = [a for a in actual if a not in expected]
         if unexpected:
             raise ValidationError(
                 f"unexpected section heading(s) in body: {unexpected}; "
-                f"only {list(SECTION_FIELDS)} are allowed"
+                f"only {expected} are allowed for schema_version {sv}"
             )
 
         # V4 (continued): missing
@@ -163,23 +164,23 @@ def validate_payload(frontmatter: dict, body: str, today: date | None = None) ->
                 f"sections must appear in this order: {expected}; got: {actual}"
             )
 
-        # V6: each section <= SECTION_WORD_CAPS[section]
-        for name in SECTION_FIELDS:
+        # V6: each section <= caps[name]
+        for name in expected:
             wc = len(sections[name].split())
-            cap = SECTION_WORD_CAPS[name]
+            cap = caps[name]
             if wc > cap:
                 raise ValidationError(
                     f"section '{name}' has {wc} words; cap is {cap}"
                 )
 
-        # V7: total body <= TOTAL_BODY_WORD_CAP
-        total = sum(len(sections[name].split()) for name in SECTION_FIELDS)
-        if total > TOTAL_BODY_WORD_CAP:
+        # V7: total body <= total_cap
+        total = sum(len(sections[name].split()) for name in expected)
+        if total > total_cap:
             raise ValidationError(
-                f"total body has {total} words; cap is {TOTAL_BODY_WORD_CAP}"
+                f"total body has {total} words; cap is {total_cap}"
             )
 
-        # V8: PII stop-list pass.
+        # V8: PII stop-list pass (unchanged from plan 05).
         own_email = frontmatter["email"].lower()
         body_lower = body.lower()
 
