@@ -1558,3 +1558,83 @@ This plan is ready to execute in a fresh Claude Code conversation.
 5. Each task ends with one commit; do not batch commits across tasks.
 6. After Task 11, append an EXECUTION LOG to this plan covering: task status (DONE / PARTIAL / BLOCKED + commit SHAs), what worked, what didn't, hardenings beyond the original plan, mid-flight architectural changes, dogfood metrics + quality assessment vs the v2 baseline, and open items handed off to plan 10.
 7. Then ask the user whether to author plan 10 now (likely scope: per-section L4 regenerate, scheduled weekly sync via `/schedule`, Summary-only `sync --section "Summary"` for in-week trajectory updates).
+
+---
+
+# EXECUTION LOG (2026-05-02)
+
+## Task status
+
+| # | Task | Status | Commit |
+|---|---|---|---|
+| 1 | Schema constants for v3 + intermediate caps | DONE | `cf4607d` |
+| 2 | Validator V3 multi-version cutoffs | DONE | `ab7ffc6` |
+| 3 | Validator V4-V7 schema-version-aware + v3 fixture | DONE | `16352e3` |
+| 4 | L3 section prompts use doubled intermediate caps | DONE | `0f8c206` |
+| 5 | L4 coherence prompt | DONE | `2c64965` |
+| 6 | SKILL.md split step 13 + step 17 + privacy gate stage 4 | DONE | `61ab8c6` |
+| 7 | Routing config: layer4: opus | DONE | `c0a85f1` |
+| 8 | Orchestrator User.sections for v3 + v2 adapter | DONE | `5433682` |
+| 9 | compose.md reads 5 sections + rebalanced weights | DONE | `c19366f` |
+| 10 | spec.md Data Schema -> v3 + D15 | DONE | `32f20fa` |
+| 11 | Founder dogfood verification | DEFERRED | (manual run by founder, against the 2026-05-02 v2 baseline at mesh-data commit `f4be7fee`; metrics + quality assessment to be appended below in a follow-up commit) |
+
+Plan 09 was authored as plan 08 at commit `391b037`, renumbered to 09 at `b3969ec` after a numbering collision with the report-issue plan, body-renumbered at `a0a4f60`. Executed in the same session as plan 07. 10 implementation commits + plan + renumber + body-renumber + execution log commits.
+
+## Test counts
+
+- Baseline (start of plan 07 + 09 execution): 103 passing.
+- After plan 07: 112 passing (+9 routing tests).
+- After plan 09 Task 1: 121 passing (+16 schema tests minus 7 replaced; net +9). Other test files (validate, load_users) failed because they pinned to v2 SECTION_FIELDS.
+- Mid-flight (Tasks 2-3): validate.py tests trip and recover as schema_version dispatch lands.
+- After plan 09 Task 8: **135 passing** (full suite green).
+
+## What worked
+
+- Versioned constant dicts (`SECTION_FIELDS_BY_VERSION`, `SECTION_WORD_CAPS_BY_VERSION`, `TOTAL_BODY_WORD_CAP_BY_VERSION`) with backward-compat aliases gave clean v2/v3 dispatch in the validator. Existing v2 tests kept passing without modification.
+- The L3 -> L4 split is conceptually clean: L3 outputs intermediate scratch (no user review, no validator), L4 outputs the final body that crosses every gate. The privacy contract grew from 3 stages to 4 in one paragraph.
+- `parse_sections` from plan 05 was already version-agnostic; no changes needed in the helper, only in callers (validator, load_users).
+- The compose.md weight redistribution rule for v2 migration users ("if Summary is empty, redistribute its 0.2 across Top of mind + Recent months pro-rata") keeps mixed v1/v2/v3 cohorts compatible during the migration window without requiring the matcher to special-case schema versions.
+
+## What didn't work first try
+
+- **`test_v3_total_body_cap_is_350`** (Task 3) was designed to trip V7 by setting per-section caps high and one section over its cap. But v3 caps sum to exactly 350 (50+50+75+100+75), so V6 always fires before V7 can. Replaced with a consistency assertion: `sum(SECTION_WORD_CAPS_BY_VERSION[3].values()) == TOTAL_BODY_WORD_CAP_BY_VERSION[3]`, plus a positive "exact cap passes" test. Note for future: V7 is structurally redundant with V6 under the current cap design; if a future schema change makes per-section sum < total cap, V7 starts mattering and that test must be expanded.
+- **Plan 09 Task 6 (SKILL.md privacy contract update)** had to wait for Task 8 (orchestrator adapter) to actually fix the failing v1 test; intermediate state was 1 failing test for two commits. Acceptable per the plan's task ordering; the failure was self-resolving.
+
+## Hardenings beyond the original plan
+
+- Backward-compat aliases (`SECTION_FIELDS`, `SECTION_WORD_CAPS`, `TOTAL_BODY_WORD_CAP`, `MIGRATION_CUTOFF_DATE`) point at the v3 entries by default. This kept plan-05-era code (orchestrator load_users.py) loading fine at module-import time even before Task 8 updated `_build_sections` to handle v3.
+- The L4 coherence prompt explicitly forbids em-dashes (carries CLAUDE.md item 15 into the prompt itself).
+
+## Mid-flight architectural changes
+
+None. The plan held.
+
+## Verification result
+
+- All 135 tests pass.
+- CLI smoke: `python -m skills.mesh_trajectory.scripts.validate tests/fixtures/user_v3_valid.md` -> `OK`.
+- v2 fixture also still passes the validator (CLI smoke `OK`).
+- `python -m skills.mesh_trajectory.scripts.model_routing layer4` -> `opus`.
+- D14 + D15 both present in spec.md decision framework.
+- No em-dashes anywhere.
+
+## What remains MANUAL (deferred)
+
+- **Founder dogfood sync with the v3 + new routing pipeline.** Task 11 calls for re-running `/mesh-trajectory sync` against the founder's corpus and comparing against the 2026-05-02 v2 all-Opus baseline (commit `f4be7fee` in mesh-data). The non-interactive execution session can verify code correctness (which it did) but not the live skill UX of the new L3 + L4 + per-section review for 5 sections. The founder should run `/mesh-trajectory sync` once to confirm:
+  1. L3 produces 4 sections within 100/150/200/150 caps that are richer than the v2 50/75/100/75 sections.
+  2. L4 produces a coherent 5-section body where Summary reads as a 30-second elevator pitch and the 4 conjoined sections flow as one paragraph each (vs the v2 disconnected-paragraphs failure mode).
+  3. V8 does not false-positive on legitimate v3 content.
+  4. Per-section review feels proportionate (5 widgets vs v2's 4).
+  5. Body validates V1-V8 cleanly and pushes to mesh-data.
+- **Founder-side `/mesh-orchestrate` dry-run on a mixed v2/v3 cohort.** The unit-level orchestrator adapter is verified; the end-to-end matcher behavior on a real cohort with mixed schema versions is not.
+
+## Open items handed off to plan 10
+
+- Live UX validation (above): two manual dogfood runs.
+- **Cost telemetry capture.** Plan 09 ships per-layer routing but does not yet capture per-layer subagent token spend in any structured form. Plan 10 candidate: lightweight tagging of subagent dispatches so the founder can run `mesh stats` to see which layers consumed how much across attendee syncs.
+- **Per-section L4 regenerate.** Step 17 currently re-runs all 5 sections coherently; if users want surgical per-section regen (like v2 had), add a per-section L4 prompt variant.
+- **Scheduled weekly sync** via `/schedule` so the body stays fresh between manual runs.
+- **Summary-only `sync --section "Summary"`** for in-week trajectory updates without re-running the full pipeline.
+- **V8 false-positive watch on v3 content.** Body grew from 250 to 350 words; more surface for the regex set to false-positive on. If real founder content trips V8 on legitimate substrings, tighten the regex with fixture tests, do not relax the rule.
+- **Migration cutoff `2026-07-01`.** Editable in `schema.py`. Re-assess after dinner #1 based on observable v2 -> v3 re-sync rate.
