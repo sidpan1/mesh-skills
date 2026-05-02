@@ -15,8 +15,9 @@ Fetch https://raw.githubusercontent.com/sidpan1/mesh-skills/main/ONBOARD.md
 and follow every step in order. Walk me through all 4 steps, confirm each
 one out loud before moving on, and stop if any step fails.
 
-Requires: Python 3.11+, git, a GitHub account that the founder has added
-to the private mesh-data repo.
+Requires: Python 3.10+ (or no Python at all - the prompt offers to fetch
+a project-scoped Python via uv), git, and a GitHub account that the
+founder has added to the mesh-data repo.
 ```
 
 The referenced `ONBOARD.md` is a four-step guided flow:
